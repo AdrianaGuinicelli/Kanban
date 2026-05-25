@@ -1,0 +1,2039 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban Material Request Web App</title>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <!-- jsQR per fotocamera -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:Arial,sans-serif; background:#f4f6f8; color:#1f2937; }
+    .badge.warning { background:#fff3cd; color:#856404; border:1px solid #ffeeba; }
+    .badge.danger  { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
+    header { background:#111827; color:white; padding:16px 24px;
+             display:flex; justify-content:space-between; align-items:center; }
+    header h1 { margin:0; font-size:20px; }
+    main { padding:20px; }
+    .card { background:white; border-radius:10px; padding:18px;
+            margin-bottom:20px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+    .hidden { display:none !important; }
+    label { display:block; margin-top:10px; font-weight:bold; }
+    input, select, button { padding:10px; margin-top:6px;
+      border:1px solid #cbd5e1; border-radius:6px; font-size:14px; }
+    input, select { width:100%; }
+    button { cursor:pointer; background:#2563eb; color:white; border:none; margin-right:8px; }
+    button.secondary { background:#6b7280; }
+    button.success   { background:#16a34a; }
+    button.danger    { background:#dc2626; }
+    button.warning   { background:#d97706; }
+    nav button { margin-top:0; }
+    table { width:100%; border-collapse:collapse; background:white; margin-top:12px; font-size:13px; }
+    th, td { border:1px solid #e5e7eb; padding:8px; text-align:left; vertical-align:top; }
+    th { background:#f9fafb; }
+    .excel-filter { position:relative; margin-top:6px; }
+    .filter-button { width:100%; background:#e5e7eb; color:#111827;
+      border:1px solid #cbd5e1; padding:6px; font-size:12px; text-align:left; margin:0; }
+    .filter-menu { position:absolute; top:34px; left:0; z-index:50; width:260px;
+      max-height:320px; overflow:auto; background:white; border:1px solid #cbd5e1;
+      border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.18); padding:10px; }
+    .filter-menu label { display:flex; align-items:center; gap:8px;
+      margin:6px 0; font-weight:normal; }
+    .filter-menu input[type="checkbox"] { width:auto; margin:0; }
+    .filter-actions { display:flex; gap:6px; margin-top:8px; }
+    .filter-actions button { padding:6px; font-size:12px; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+    .toolbar input, .toolbar select { width:auto; min-width:180px; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:999px;
+             background:#e0e7ff; color:#3730a3; font-size:12px; font-weight:bold; }
+    .muted { color:#6b7280; font-size:13px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+    .edit-input { width:100%; padding:4px 6px; font-size:12px;
+      border:1px solid #2563eb; border-radius:4px; background:#eff6ff; }
+    .row-editing { background:#eff6ff !important; }
+    .item-table-actions { display:flex; gap:4px; flex-wrap:wrap; }
+    #cameraVideo { background:#000; }
+    .input-main-box { border:2px solid #2563eb; border-radius:10px; padding:16px;
+      margin-bottom:12px; background:#f0f7ff; }
+    .input-main-box h3 { margin:0 0 6px 0; color:#2563eb; font-size:16px; }
+    .input-secondary-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .input-secondary-btn { padding:8px 14px; font-size:13px; border-radius:8px; cursor:pointer;
+      border:1.5px solid #cbd5e1; background:white; color:#374151;
+      display:inline-flex; align-items:center; gap:6px; margin-top:0; }
+    .input-secondary-btn:hover { background:#f3f4f6; }
+    .action-row { display:flex; gap:10px; flex-wrap:wrap;
+      margin:14px 0 8px 0; align-items:center; }
+    .action-row button { margin-top:0; }
+    /* LOADING OVERLAY */
+    #loadingOverlay {
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.5); z-index:9999;
+      display:flex; align-items:center; justify-content:center;
+      flex-direction:column; gap:16px;
+    }
+    #loadingOverlay p { color:white; font-size:18px; font-weight:bold; }
+    .spinner {
+      width:48px; height:48px; border:5px solid #ffffff44;
+      border-top:5px solid white; border-radius:50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* SYNC INDICATOR */
+    #syncIndicator {
+      position:fixed; bottom:16px; right:16px;
+      background:#111827; color:white; padding:8px 14px;
+      border-radius:999px; font-size:12px; z-index:1000;
+      display:none; align-items:center; gap:8px;
+    }
+    /* STAMPA */
+    #printArea { display:none; }
+    @media print {
+      header, main, nav { display:none !important; }
+      #printArea { display:block !important; position:fixed;
+        top:0; left:0; width:100%; }
+      .print-vs-block { page-break-after:always !important;
+        break-after:page !important; display:block !important; }
+      .print-vs-block:last-child { page-break-after:auto !important; }
+      .print-header { margin-bottom:10px;
+        border-bottom:2px solid #111827; padding-bottom:8px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>Connessione al database...</p>
+</div>
+
+<!-- SYNC INDICATOR -->
+<div id="syncIndicator">⏳ Sincronizzazione...</div>
+
+<header>
+  <h1>Kanban Material Request</h1>
+  <div id="userInfo">Non autenticato</div>
+</header>
+
+<main>
+  <!-- LOGIN -->
+  <section id="loginCard" class="card">
+    <h2>Login utente</h2>
+    <p class="muted">Formato barcode: <strong>USER|email@azienda.it</strong></p>
+    <div class="grid">
+      <div>
+        <label>Barcode utente</label>
+        <input id="loginBarcode" placeholder="USER|mario.rossi@azienda.it"
+          onkeydown="if(event.key==='Enter') loginWithBarcode()" />
+        <button onclick="loginWithBarcode()">Login da barcode</button>
+      </div>
+      <div>
+        <label>Email</label>
+        <input id="loginEmail" placeholder="mario.rossi@azienda.it" />
+        <label>Password</label>
+        <input id="loginPassword" type="password" placeholder="password"
+          onkeydown="if(event.key==='Enter') loginWithPassword()" />
+        <button onclick="loginWithPassword()">Login con password</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- NAV -->
+  <nav id="mainNav" class="card hidden no-print">
+    <button onclick="showPanel('productionPanel')">Richiesta produzione</button>
+    <button onclick="showPanel('warehousePanel')">Tabella richieste</button>
+    <button onclick="showPanel('pickingPanel')">Liste picking</button>
+    <button onclick="showPanel('historyPanel')">Storico</button>
+    <button onclick="showPanel('adminUsersPanel')">Gestione utenti</button>
+    <button class="secondary" onclick="logout()">Logout</button>
+    <button onclick="toggleUploadPanel()" id="uploadBtn">📦 Carica anagrafica</button>
+    <button onclick="toggleMissingCodesPanel()" id="missingCodesBtn">⚠️ Codici mancanti</button>
+  </nav>
+
+  <!-- PRODUZIONE -->
+  <section id="productionPanel" class="card hidden">
+    <div id="productionContent">
+      <h2>Produzione - richiesta materiali</h2>
+      <div style="margin-bottom:12px;">
+        <label>Priorità</label>
+        <select id="priorityInput" style="max-width:300px;">
+          <option value="Normale">Normale</option>
+          <option value="Urgente">Urgente</option>
+          <option value="Fermo linea">Fermo linea</option>
+        </select>
+      </div>
+      <div class="input-main-box">
+        <h3>🔫 Pistola barcode / Inserimento testo</h3>
+        <p class="muted" style="margin:0 0 8px 0;">
+          Spara il barcode oppure digita il codice e premi <strong>Invio</strong>
+        </p>
+        <input id="barcodeInput" placeholder="Spara o digita il codice..."
+          autofocus
+          onkeydown="if(event.key==='Enter') processBarcodeInput()"
+          oninput="handleBarcodeInput()"
+          style="max-width:500px; margin-bottom:10px;" />
+        <div class="input-secondary-row">
+          <button class="input-secondary-btn"
+            style="background:#f0fdf4;border-color:#16a34a;color:#16a34a;"
+            onclick="openCamera()">📷 Fotocamera</button>
+          <button class="input-secondary-btn" id="closeCameraBtn"
+            onclick="closeCamera()"
+            style="display:none;background:#fee2e2;border-color:#dc2626;color:#dc2626;">
+            ✖ Chiudi fotocamera
+          </button>
+          <button class="input-secondary-btn"
+            style="background:#fffbeb;border-color:#d97706;color:#d97706;"
+            onclick="openManualForm()">✏️ Inserimento manuale</button>
+        </div>
+        <div id="cameraContainer" style="display:none;margin-top:10px;max-width:500px;">
+          <video id="cameraVideo"
+            style="width:100%;border-radius:8px;max-height:280px;"
+            autoplay playsinline></video>
+          <canvas id="cameraCanvas" style="display:none;"></canvas>
+          <p id="cameraStatus" class="muted" style="margin-top:6px;">
+            📷 Punta la fotocamera sul Data Matrix...
+          </p>
+        </div>
+      </div>
+      <div id="manualForm" class="card hidden"
+           style="margin-top:0;border:2px solid #d97706;">
+        <h3 style="color:#d97706;margin:0 0 10px 0;">✏️ Inserimento manuale</h3>
+        <div class="grid">
+          <div><label>Codice *</label>
+               <input id="manualCode" placeholder="Es. A12345" /></div>
+          <div><label>Descrizione *</label>
+               <input id="manualDescription" placeholder="Es. Vite M6" /></div>
+          <div><label>UM *</label>
+               <input id="manualUnit" placeholder="Es. PZ" /></div>
+          <div><label>Quantità *</label>
+               <input id="manualQty" type="number" placeholder="Es. 50" /></div>
+          <div><label>Value Stream *</label>
+               <input id="manualVS" placeholder="Es. ASSEMBLY" /></div>
+          <div><label>Linea *</label>
+               <input id="manualLine" placeholder="Es. LINEA1" /></div>
+        </div>
+        <div style="margin-top:12px;">
+          <button class="success" onclick="addManualRow()">➕ Aggiungi riga</button>
+          <button class="secondary" onclick="openManualForm()">✖ Chiudi</button>
+        </div>
+      </div>
+      <div class="action-row">
+        <button class="success" style="padding:12px 24px;font-size:15px;"
+                onclick="sendDraftRequests()">
+          📤 Invia richieste al magazzino
+        </button>
+        <button class="secondary" onclick="downloadDraftExcel()">⬇️ Scarica Excel</button>
+      </div>
+      <div id="draftRowsContainer"></div>
+    </div>
+  </section>
+
+  <!-- MAGAZZINO -->
+  <section id="warehousePanel" class="card hidden">
+    <h2>Magazzino - richieste da produzione</h2>
+    <div class="toolbar no-print">
+      <select id="viewMode" onchange="renderRequestsTable()">
+        <option value="detail">Vista dettagliata</option>
+        <option value="grouped">Vista accorpata per codice</option>
+      </select>
+      <button onclick="clearColumnFilters()">Pulisci filtri</button>
+      <button onclick="toggleSelectAll(true)">Flagga tutte</button>
+      <button class="secondary" onclick="toggleSelectAll(false)">Togli flag</button>
+      <button onclick="downloadRequestsExcel()">Scarica Excel</button>
+      <button class="success" onclick="printByValueStream()">🖨️ Stampa per Value Stream</button>
+    </div>
+    <div id="requestsTableContainer"></div>
+  </section>
+
+  <!-- PICKING -->
+  <section id="pickingPanel" class="card hidden">
+    <h2>Liste di picking generate</h2>
+    <div class="toolbar no-print">
+      <input id="pickingCodeInput" placeholder="Spara codice lista picking" />
+      <button onclick="setPickingListStatusFromBarcode('Inizio stoccaggio')">Inizio stoccaggio</button>
+      <button class="success"
+              onclick="setPickingListStatusFromBarcode('Fine stoccaggio')">Fine stoccaggio</button>
+    </div>
+    <div id="pickingTableContainer"></div>
+  </section>
+
+  <!-- STORICO -->
+  <section id="historyPanel" class="card hidden">
+    <h2>Storico</h2>
+    <div class="toolbar no-print">
+      <button onclick="showHistoryTab('picking')" id="tabPickingBtn" class="success">
+        📦 Storico Picking
+      </button>
+      <button onclick="showHistoryTab('production')" id="tabProductionBtn" class="secondary">
+        🏭 Storico Richieste Produzione
+      </button>
+      <button onclick="downloadHistoryExcel()">⬇️ Excel storico picking</button>
+      <button class="secondary" onclick="downloadProductionHistoryExcel()">
+        ⬇️ Excel storico produzione
+      </button>
+    </div>
+    <div id="historyPickingContainer"></div>
+    <div id="historyProductionContainer" style="display:none;"></div>
+  </section>
+
+  <!-- ADMIN UTENTI -->
+  <section id="adminUsersPanel" class="card hidden">
+    <h2>Admin - gestione utenti</h2>
+    <p class="muted">Barcode tessera: <strong>USER|email</strong></p>
+    <div class="grid">
+      <div><label>Nome</label>
+           <input id="newUserName" placeholder="Mario" /></div>
+      <div><label>Cognome</label>
+           <input id="newUserSurname" placeholder="Rossi" /></div>
+      <div><label>Email</label>
+           <input id="newUserEmail" placeholder="mario.rossi@azienda.it" /></div>
+      <div><label>Password</label>
+           <input id="newUserPassword" type="password"
+                  placeholder="minimo 6 caratteri" /></div>
+      <div><label>Tipo profilo</label>
+           <select id="newUserRole">
+             <option value="produzione">Produzione</option>
+             <option value="magazzino">Magazzino</option>
+             <option value="admin">Admin</option>
+           </select></div>
+    </div>
+    <button onclick="createUser()">Crea utente</button>
+    <div id="usersTableContainer"></div>
+  </section>
+
+  <!-- PANNELLO ANAGRAFICA -->
+  <div id="uploadPanel" class="card hidden" style="background:#f9fafb;">
+    <h3>📦 Carica anagrafica articoli (CSV)</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <button class="secondary" onclick="downloadItemMasterTemplate()">
+        ⬇️ Scarica template
+      </button>
+      <label style="margin:0;font-weight:normal;">
+        <span style="display:inline-block;padding:8px 16px;background:#2563eb;
+          color:white;border-radius:6px;cursor:pointer;font-size:14px;">
+          📂 Scegli file CSV
+        </span>
+        <input type="file" id="fileInputUpload" accept=".csv"
+               onchange="loadItemMasterFromFile()" style="display:none;" />
+      </label>
+      <span id="fileChosenLabel" class="muted">Nessun file scelto</span>
+    </div>
+    <p id="itemMasterStatus" class="muted">Anagrafica non caricata</p>
+
+    <!-- FORM INSERIMENTO MANUALE ANAGRAFICA -->
+    <div style="margin-top:14px;">
+      <button onclick="toggleAddItemForm()" id="toggleAddItemBtn"
+              style="background:#2563eb;color:white;border:none;
+                     padding:10px 18px;border-radius:8px;cursor:pointer;font-size:14px;">
+        ➕ Aggiungi articolo manualmente
+      </button>
+    </div>
+    <div id="addItemForm" style="display:none;margin-top:12px;background:#f0f7ff;
+         border:2px solid #2563eb;border-radius:10px;padding:16px;">
+      <h4 style="margin:0 0 12px 0;color:#2563eb;">➕ Nuovo articolo anagrafica</h4>
+      <div class="grid">
+        <div><label>Codice *</label>
+             <input id="newItemCode" placeholder="Es. A12345" /></div>
+        <div><label>Descrizione *</label>
+             <input id="newItemDescription" placeholder="Es. Vite M6" /></div>
+        <div><label>UM *</label>
+             <input id="newItemUnit" placeholder="Es. PZ" /></div>
+        <div><label>Quantità default *</label>
+             <input id="newItemQty" type="number" placeholder="Es. 50" /></div>
+        <div><label>Value Stream *</label>
+             <input id="newItemVS" placeholder="Es. ASSEMBLY" /></div>
+        <div><label>Linea *</label>
+             <input id="newItemLine" placeholder="Es. LINEA1" /></div>
+        <div><label>Ubicazione</label>
+             <input id="newItemLocation" placeholder="Es. MC-A01-01" /></div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;">
+        <button class="success" onclick="addItemManually()">💾 Salva articolo</button>
+        <button class="secondary" onclick="toggleAddItemForm()">✖ Annulla</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <input type="text" id="itemMasterSearch"
+        placeholder="🔍 Cerca per codice, descrizione, linea..."
+        oninput="renderItemMasterTable()"
+        style="width:100%;padding:10px;font-size:14px;" />
+    </div>
+    <p id="itemMasterCount" class="muted" style="margin-top:8px;"></p>
+    <div id="itemMasterTableContainer" style="margin-top:10px;overflow-x:auto;"></div>
+  </div>
+
+  <!-- PANNELLO CODICI MANCANTI -->
+  <div id="missingCodesPanel" class="card hidden"
+       style="background:#fff7ed;border:2px solid #f97316;">
+    <h3 style="color:#c2410c;margin:0 0 10px 0;">
+      ⚠️ Codici inseriti manualmente non presenti in anagrafica
+    </h3>
+    <p class="muted">
+      Questi codici sono stati inseriti manualmente e non erano in anagrafica.
+      Una volta inseriti in anagrafica clicca "✅ Segna inserito".
+    </p>
+    <div id="missingCodesTableContainer"></div>
+  </div>
+
+</main>
+
+<!-- AREA STAMPA -->
+<div id="printArea"></div>
+
+<script>
+// ============================================================
+// FIREBASE CONFIG
+// ============================================================
+const firebaseConfig = {
+  apiKey:            "AIzaSyDd9tbidWv_kxmgyG9pceU1TynKf90zYWI",
+  authDomain:        "kanban-material-request-9bbc1.firebaseapp.com",
+  projectId:         "kanban-material-request-9bbc1",
+  storageBucket:     "kanban-material-request-9bbc1.firebasestorage.app",
+  messagingSenderId: "269112692732",
+  appId:             "1:269112692732:web:7184a5487363de6bc5ac79"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ============================================================
+// VARIABILI GLOBALI
+// ============================================================
+let currentUser      = null;
+let sortState        = { column:'requestIso', direction:'desc' };
+let draftRows        = [];
+let columnFilters    = {};
+let openFilterColumn = null;
+let itemMaster       = {};
+let barcodeBufferTimeout = null;
+let editingItemCode  = null;
+let editingQtyId     = null;
+let editingLocationId= null;
+let editingPriorityId= null;
+let itemColFilters   = {};
+let cameraStream     = null;
+let cameraScanInterval = null;
+let currentHistoryTab  = 'picking';
+
+// dati in memoria (aggiornati dai listener Firestore)
+let appUsers             = [];
+let appRequests          = [];
+let appPickingLists      = [];
+let appHistory           = [];
+let appProductionHistory = [];
+let appMissingCodes      = [];
+
+const requestColumns = [
+  ['itemCode',       'Codice articolo'],
+  ['description',    'Descrizione'],
+  ['quantity',       'Quantità'],
+  ['unit',           'UM'],
+  ['valueStream',    'Value Stream'],
+  ['line',           'Linea'],
+  ['location',       'Ubicazione'],
+  ['priority',       'Priorità'],
+  ['user',           'Utente'],
+  ['requestDate',    'Data richiesta'],
+  ['requestTime',    'Ora richiesta'],
+  ['status',         'Stato riga'],
+  ['pickingListCode','Lista picking']
+];
+
+// ============================================================
+// UTILITY
+// ============================================================
+function nowParts() {
+  const d = new Date();
+  return {
+    iso:  d.toISOString(),
+    date: d.toLocaleDateString('it-IT'),
+    time: d.toLocaleTimeString('it-IT')
+  };
+}
+function makeId(prefix) {
+  return prefix + '-' + Date.now().toString(36).toUpperCase()
+       + '-' + Math.random().toString(36).substring(2,8).toUpperCase();
+}
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function downloadCsv(filename, rows) {
+  if (!rows.length) { alert('Nessun dato da scaricare'); return; }
+  const headers = Object.keys(rows[0]);
+  const csv = [headers.join(';')]
+    .concat(rows.map(row =>
+      headers.map(h =>
+        '"' + String(row[h]??'').replaceAll('"','""') + '"'
+      ).join(';')
+    )).join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
+function showSync() {
+  const el = document.getElementById('syncIndicator');
+  el.style.display = 'flex';
+  setTimeout(() => { el.style.display = 'none'; }, 1500);
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// ============================================================
+// AUDIO
+// ============================================================
+function beepSuccess() {
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 800; osc.type = 'sine'; osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.15);
+  } catch(e) {}
+}
+function beepError() {
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const osc = ctx.createOscillator(); const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = 200; osc.type = 'square'; osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.3);
+  } catch(e) {}
+}
+
+// ============================================================
+// FIRESTORE - LISTENER REALTIME
+// ============================================================
+function startRealtimeListeners() {
+
+  // UTENTI
+  db.collection('users').onSnapshot(snap => {
+    appUsers = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    renderUsersTable();
+    showSync();
+  });
+
+  // RICHIESTE
+  db.collection('requests').onSnapshot(snap => {
+    appRequests = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    renderRequestsTable();
+    showSync();
+  });
+
+  // LISTE PICKING
+  db.collection('pickingLists').onSnapshot(snap => {
+    appPickingLists = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    renderPickingTable();
+    showSync();
+  });
+
+  // STORICO PICKING
+  db.collection('history').onSnapshot(snap => {
+    appHistory = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    renderHistoryTable();
+    showSync();
+  });
+
+  // STORICO PRODUZIONE
+  db.collection('productionHistory').onSnapshot(snap => {
+    appProductionHistory = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    if (currentHistoryTab === 'production') renderProductionHistoryTable();
+    showSync();
+  });
+
+  // CODICI MANCANTI
+  db.collection('missingCodes').onSnapshot(snap => {
+    appMissingCodes = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+    renderMissingCodesTable();
+    updateMissingCodesBtnColor();
+    showSync();
+  });
+
+  // ANAGRAFICA
+  db.collection('itemMaster').onSnapshot(snap => {
+    itemMaster = {};
+    snap.docs.forEach(d => { itemMaster[d.id] = d.data(); });
+    const total = Object.keys(itemMaster).length;
+    const el = document.getElementById('itemMasterStatus');
+    if (el && total > 0)
+      el.innerText = '✅ Anagrafica attiva (' + total + ' articoli)';
+    renderItemMasterTable();
+    showSync();
+  });
+
+  hideLoading();
+}
+
+// ============================================================
+// FIRESTORE - OPERAZIONI CRUD
+// ============================================================
+
+// ── UTENTI ──────────────────────────────────────────────────
+async function fsAddUser(user) {
+  await db.collection('users').doc(user.id).set(user);
+}
+async function fsDeleteUser(userId) {
+  await db.collection('users').doc(userId).delete();
+}
+
+// ── RICHIESTE ───────────────────────────────────────────────
+async function fsAddRequest(req) {
+  await db.collection('requests').doc(req.id).set(req);
+}
+async function fsUpdateRequest(firestoreId, data) {
+  await db.collection('requests').doc(firestoreId).update(data);
+}
+async function fsDeleteRequest(firestoreId) {
+  await db.collection('requests').doc(firestoreId).delete();
+}
+
+// ── PICKING LISTS ────────────────────────────────────────────
+async function fsAddPickingList(list) {
+  await db.collection('pickingLists').doc(list.code).set(list);
+}
+async function fsUpdatePickingList(code, data) {
+  await db.collection('pickingLists').doc(code).update(data);
+}
+
+// ── STORICO ──────────────────────────────────────────────────
+async function fsAddHistory(item) {
+  await db.collection('history').doc(item.id).set(item);
+}
+async function fsAddProductionHistory(item) {
+  await db.collection('productionHistory').doc(item.id).set(item);
+}
+
+// ── CODICI MANCANTI ──────────────────────────────────────────
+async function fsAddMissingCode(item) {
+  await db.collection('missingCodes').doc(item.id).set(item);
+}
+async function fsUpdateMissingCode(firestoreId, data) {
+  await db.collection('missingCodes').doc(firestoreId).update(data);
+}
+
+// ── ANAGRAFICA ───────────────────────────────────────────────
+async function fsSetItemMaster(code, item) {
+  await db.collection('itemMaster').doc(code).set(item);
+}
+async function fsDeleteItemMaster(code) {
+  await db.collection('itemMaster').doc(code).delete();
+}
+
+// ============================================================
+// LOGIN / LOGOUT
+// ============================================================
+async function initAdminIfNeeded() {
+  // crea admin di default se non esiste ancora
+  const snap = await db.collection('users').doc('admin-default').get();
+  if (!snap.exists) {
+    await db.collection('users').doc('admin-default').set({
+      id:      'admin-default',
+      name:    'Admin',
+      surname: 'Sistema',
+      email:   'admin@azienda.it',
+      password:'admin',
+      role:    'admin',
+      barcode: 'USER|admin@azienda.it'
+    });
+  }
+}
+
+function loginWithBarcode() {
+  const raw = document.getElementById('loginBarcode').value.trim();
+  const parts = raw.split('|').map(p => p.trim());
+  if (parts.length !== 2 || parts[0] !== 'USER') {
+    alert('Barcode non valido. Formato: USER|email@azienda.it'); return;
+  }
+  const user = appUsers.find(u =>
+    u.email.toLowerCase() === parts[1].toLowerCase()
+  );
+  if (!user) { alert('Utente non trovato.'); return; }
+  setLoggedUser(user);
+}
+function loginWithPassword() {
+  const email    = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const password = document.getElementById('loginPassword').value;
+  const user     = appUsers.find(u =>
+    u.email.toLowerCase() === email && u.password === password
+  );
+  if (!user) { alert('Email o password non corretti'); return; }
+  setLoggedUser(user);
+}
+function setLoggedUser(user) {
+  currentUser = user;
+  document.getElementById('userInfo').innerHTML =
+    user.name + ' ' + user.surname +
+    ' <span class="badge">' + user.role + '</span>';
+  document.getElementById('loginCard').classList.add('hidden');
+  document.getElementById('mainNav').classList.remove('hidden');
+  applyRoleVisibility();
+}
+function logout() { currentUser = null; location.reload(); }
+
+function applyRoleVisibility() {
+  const buttons    = document.querySelectorAll('#mainNav button');
+  const uploadBtn  = document.getElementById('uploadBtn');
+  const missingBtn = document.getElementById('missingCodesBtn');
+  buttons.forEach(b => b.classList.remove('hidden'));
+  if (currentUser.role === 'produzione') {
+    [1,2,3,4].forEach(i => buttons[i].classList.add('hidden'));
+    if (uploadBtn)  uploadBtn.classList.add('hidden');
+    if (missingBtn) missingBtn.classList.add('hidden');
+    showPanel('productionPanel');
+  }
+  if (currentUser.role === 'magazzino') {
+    [0,3,4].forEach(i => buttons[i].classList.add('hidden'));
+    if (uploadBtn)  uploadBtn.classList.add('hidden');
+    if (missingBtn) missingBtn.classList.add('hidden');
+    showPanel('warehousePanel');
+  }
+  if (currentUser.role === 'admin') {
+    if (uploadBtn)  uploadBtn.classList.remove('hidden');
+    if (missingBtn) missingBtn.classList.remove('hidden');
+    updateMissingCodesBtnColor();
+    showPanel('productionPanel');
+  }
+}
+
+// ============================================================
+// COLORE PULSANTE CODICI MANCANTI
+// ============================================================
+function updateMissingCodesBtnColor() {
+  const btn = document.getElementById('missingCodesBtn');
+  if (!btn) return;
+  const hasPending = appMissingCodes.some(
+    m => m.codeStatus === 'Codice non presente in anagrafica'
+  );
+  btn.style.background = hasPending ? '#dc2626' : '#2563eb';
+  btn.style.color = 'white';
+}
+
+// ============================================================
+// NAVIGAZIONE
+// ============================================================
+function showPanel(panelId) {
+  const up = document.getElementById('uploadPanel');
+  const mp = document.getElementById('missingCodesPanel');
+  if (up) up.classList.add('hidden');
+  if (mp) mp.classList.add('hidden');
+  ['productionPanel','warehousePanel','pickingPanel',
+   'historyPanel','adminUsersPanel'].forEach(id => {
+    document.getElementById(id).classList.add('hidden');
+  });
+  document.getElementById(panelId).classList.remove('hidden');
+  renderAll();
+}
+
+function toggleUploadPanel() {
+  const upload  = document.getElementById('uploadPanel');
+  const missing = document.getElementById('missingCodesPanel');
+  if (!upload.classList.contains('hidden')) {
+    upload.classList.add('hidden');
+    showPanel('productionPanel'); return;
+  }
+  missing.classList.add('hidden');
+  ['productionPanel','warehousePanel','pickingPanel',
+   'historyPanel','adminUsersPanel'].forEach(id => {
+    document.getElementById(id).classList.add('hidden');
+  });
+  upload.classList.remove('hidden');
+  renderItemMasterTable();
+}
+
+function toggleMissingCodesPanel() {
+  const upload  = document.getElementById('uploadPanel');
+  const missing = document.getElementById('missingCodesPanel');
+  if (!missing.classList.contains('hidden')) {
+    missing.classList.add('hidden');
+    showPanel('productionPanel'); return;
+  }
+  upload.classList.add('hidden');
+  ['productionPanel','warehousePanel','pickingPanel',
+   'historyPanel','adminUsersPanel'].forEach(id => {
+    document.getElementById(id).classList.add('hidden');
+  });
+  missing.classList.remove('hidden');
+  renderMissingCodesTable();
+}
+
+// ============================================================
+// STORICO TAB
+// ============================================================
+function showHistoryTab(tab) {
+  currentHistoryTab = tab;
+  const picking    = document.getElementById('historyPickingContainer');
+  const production = document.getElementById('historyProductionContainer');
+  const btnP       = document.getElementById('tabPickingBtn');
+  const btnPr      = document.getElementById('tabProductionBtn');
+  if (tab === 'picking') {
+    picking.style.display    = 'block';
+    production.style.display = 'none';
+    btnP.className  = 'success'; btnPr.className = 'secondary';
+    renderHistoryTable();
+  } else {
+    picking.style.display    = 'none';
+    production.style.display = 'block';
+    btnP.className  = 'secondary'; btnPr.className = 'success';
+    renderProductionHistoryTable();
+  }
+}
+
+// ============================================================
+// ANAGRAFICA
+// ============================================================
+function loadItemMasterFromFile() {
+  if (!currentUser || currentUser.role !== 'admin') {
+    alert('Solo admin può caricare l\'anagrafica'); return;
+  }
+  const fileInput = document.getElementById('fileInputUpload');
+  const file = fileInput.files[0];
+  if (!file) return;
+  const lbl = document.getElementById('fileChosenLabel');
+  if (lbl) lbl.innerText = file.name;
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const text = e.target.result;
+    let addedCount = 0, updatedCount = 0;
+    const now = new Date().toLocaleString('it-IT');
+    const rows = text.split('\n').slice(1);
+    const batch = db.batch();
+    rows.forEach(row => {
+      if (!row.trim()) return;
+      const cols = row.includes(';') ? row.split(';') : row.split(',');
+      if (cols.length < 6) return;
+      const code = cols[0].trim().toUpperCase();
+      if (!code) return;
+      const isNew = !itemMaster[code];
+      if (isNew) addedCount++; else updatedCount++;
+      const ref = db.collection('itemMaster').doc(code);
+      batch.set(ref, {
+        description: cols[1].trim(),
+        unit:        cols[2].trim(),
+        defaultQty:  Number(cols[3]),
+        valueStream: cols[4].trim(),
+        line:        cols[5].trim(),
+        location:    cols[6] ? cols[6].trim() : '',
+        uploadDate:  isNew ? now : (itemMaster[code]?.uploadDate || now)
+      });
+    });
+    await batch.commit();
+    const total = Object.keys(itemMaster).length + addedCount;
+    alert('Anagrafica aggiornata:\n- Nuovi: ' + addedCount +
+          '\n- Aggiornati: ' + updatedCount);
+  };
+  reader.readAsText(file);
+}
+
+function downloadItemMasterTemplate() {
+  let rows = [];
+  if (Object.keys(itemMaster).length) {
+    rows = Object.entries(itemMaster).map(([code, item]) => ({
+      Codice: code, Descrizione: item.description, UM: item.unit,
+      Quantita_Default: item.defaultQty, Value_Stream: item.valueStream,
+      Linea: item.line, Ubicazione: item.location || ''
+    }));
+  } else {
+    rows = [{ Codice:'', Descrizione:'', UM:'',
+              Quantita_Default:'', Value_Stream:'', Linea:'', Ubicazione:'' }];
+  }
+  downloadCsv('anagrafica.csv', rows);
+}
+
+function toggleAddItemForm() {
+  const form = document.getElementById('addItemForm');
+  const btn  = document.getElementById('toggleAddItemBtn');
+  if (form.style.display === 'none') {
+    form.style.display   = 'block';
+    btn.innerText        = '✖ Chiudi form inserimento';
+    btn.style.background = '#6b7280';
+    ['newItemCode','newItemDescription','newItemUnit',
+     'newItemQty','newItemVS','newItemLine','newItemLocation'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('newItemCode').focus();
+  } else {
+    form.style.display   = 'none';
+    btn.innerText        = '➕ Aggiungi articolo manualmente';
+    btn.style.background = '#2563eb';
+  }
+}
+
+async function addItemManually() {
+  if (!currentUser || currentUser.role !== 'admin') {
+    alert('Solo admin può modificare l\'anagrafica'); return;
+  }
+  const code        = document.getElementById('newItemCode').value.trim().toUpperCase();
+  const description = document.getElementById('newItemDescription').value.trim();
+  const unit        = document.getElementById('newItemUnit').value.trim();
+  const qty         = Number(document.getElementById('newItemQty').value);
+  const valueStream = document.getElementById('newItemVS').value.trim();
+  const line        = document.getElementById('newItemLine').value.trim();
+  const location    = document.getElementById('newItemLocation').value.trim();
+  if (!code || !description || !unit || !valueStream || !line) {
+    alert('Compila tutti i campi obbligatori (*)'); return;
+  }
+  if (!qty || qty <= 0) {
+    alert('La quantità default deve essere maggiore di zero'); return;
+  }
+  if (itemMaster[code]) {
+    const ok = confirm('Il codice ' + code + ' esiste già.\nVuoi sovrascrivere?');
+    if (!ok) return;
+  }
+  const now = new Date().toLocaleString('it-IT');
+  await fsSetItemMaster(code, {
+    description, unit, defaultQty: qty, valueStream, line, location,
+    uploadDate: itemMaster[code] ? (itemMaster[code].uploadDate || now) : now
+  });
+  alert('✅ Articolo ' + code + ' aggiunto!');
+  toggleAddItemForm();
+}
+
+function renderItemMasterTable() {
+  const container = document.getElementById('itemMasterTableContainer');
+  const countEl   = document.getElementById('itemMasterCount');
+  if (!container) return;
+  const allItems = Object.entries(itemMaster);
+  if (!allItems.length) {
+    container.innerHTML = '<p class="muted">Nessun articolo caricato.</p>';
+    if (countEl) countEl.innerText = ''; return;
+  }
+  const searchInput = document.getElementById('itemMasterSearch');
+  const searchText  = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  const fCode = (itemColFilters['code']        || '').toLowerCase();
+  const fDesc = (itemColFilters['description'] || '').toLowerCase();
+  const fUnit = (itemColFilters['unit']        || '').toLowerCase();
+  const fVS   = (itemColFilters['valueStream'] || '').toLowerCase();
+  const fLine = (itemColFilters['line']        || '').toLowerCase();
+  const fLoc  = (itemColFilters['location']    || '').toLowerCase();
+  const fDate = (itemColFilters['uploadDate']  || '').toLowerCase();
+  const filtered = allItems.filter(([code, item]) => {
+    if (searchText) {
+      const m = code.toLowerCase().includes(searchText) ||
+        (item.description||'').toLowerCase().includes(searchText) ||
+        (item.unit||'').toLowerCase().includes(searchText) ||
+        (item.valueStream||'').toLowerCase().includes(searchText) ||
+        (item.line||'').toLowerCase().includes(searchText) ||
+        (item.location||'').toLowerCase().includes(searchText);
+      if (!m) return false;
+    }
+    if (fCode && !code.toLowerCase().includes(fCode)) return false;
+    if (fDesc && !(item.description||'').toLowerCase().includes(fDesc)) return false;
+    if (fUnit && !(item.unit||'').toLowerCase().includes(fUnit)) return false;
+    if (fVS   && !(item.valueStream||'').toLowerCase().includes(fVS))  return false;
+    if (fLine && !(item.line||'').toLowerCase().includes(fLine)) return false;
+    if (fLoc  && !(item.location||'').toLowerCase().includes(fLoc))  return false;
+    if (fDate && !(item.uploadDate||'').toLowerCase().includes(fDate)) return false;
+    return true;
+  });
+  if (countEl) countEl.innerText =
+    'Articoli visibili: ' + filtered.length + ' di ' + allItems.length;
+  if (!filtered.length) {
+    container.innerHTML = '<p class="muted">Nessun articolo trovato.</p>'; return;
+  }
+  const fi = (col, ph) =>
+    '<th><input type="text" placeholder="🔍 ' + ph + '"'
+    + ' value="' + escapeHtml(itemColFilters[col]||'') + '"'
+    + ' oninput="setItemColFilter(\'' + col + '\',this.value)"'
+    + ' style="width:100%;padding:4px;font-size:11px;margin:0;"></th>';
+  let html = '<table><thead>'
+    + '<tr><th>Codice</th><th>Descrizione</th><th>UM</th><th>Qta Default</th>'
+    + '<th>Value Stream</th><th>Linea</th><th>Ubicazione</th>'
+    + '<th>Data caricamento</th><th>Ora caricamento</th>'
+    + '<th class="no-print">Azioni</th></tr>'
+    + '<tr>' + fi('code','Codice') + fi('description','Descrizione') + fi('unit','UM')
+    + '<th></th>' + fi('valueStream','Value Stream') + fi('line','Linea')
+    + fi('location','Ubicazione') + fi('uploadDate','Data') + '<th></th>'
+    + '<th class="no-print"><button onclick="clearItemColFilters()" '
+    + 'style="padding:4px 8px;font-size:11px;margin:0;background:#dc2626;">'
+    + '✖ Pulisci</button></th>'
+    + '</tr></thead><tbody>';
+  filtered.forEach(([code, item]) => {
+    const isEditing = (editingItemCode === code);
+    if (isEditing) {
+      html += '<tr class="row-editing"><td><strong>' + code + '</strong></td>'
+        + '<td><input class="edit-input" id="edit_description" value="'
+        + escapeHtml(item.description||'') + '"></td>'
+        + '<td><input class="edit-input" id="edit_unit" value="'
+        + escapeHtml(item.unit||'') + '" style="width:60px"></td>'
+        + '<td><input class="edit-input" id="edit_defaultQty" type="number" value="'
+        + (item.defaultQty||0) + '" style="width:70px"></td>'
+        + '<td><input class="edit-input" id="edit_valueStream" value="'
+        + escapeHtml(item.valueStream||'') + '"></td>'
+        + '<td><input class="edit-input" id="edit_line" value="'
+        + escapeHtml(item.line||'') + '"></td>'
+        + '<td><input class="edit-input" id="edit_location" value="'
+        + escapeHtml(item.location||'') + '"></td>'
+        + '<td colspan="2"><span class="muted">'
+        + (item.uploadDate||'N/D') + '</span></td>'
+        + '<td class="no-print"><div class="item-table-actions">'
+        + '<button class="success" onclick="saveItemEdit(\'' + code + '\')">💾 Salva</button>'
+        + '<button class="secondary" onclick="cancelItemEdit()">✖ Annulla</button>'
+        + '</div></td></tr>';
+    } else {
+      let datePart = 'N/D', timePart = '';
+      if (item.uploadDate) {
+        const p = item.uploadDate.split(', ');
+        if (p.length === 2) { datePart = p[0]; timePart = p[1]; }
+        else datePart = item.uploadDate;
+      }
+      html += '<tr><td><strong>' + code + '</strong></td>'
+        + '<td>' + escapeHtml(item.description||'') + '</td>'
+        + '<td>' + escapeHtml(item.unit||'') + '</td>'
+        + '<td>' + (item.defaultQty||0) + '</td>'
+        + '<td>' + escapeHtml(item.valueStream||'') + '</td>'
+        + '<td>' + escapeHtml(item.line||'') + '</td>'
+        + '<td>' + escapeHtml(item.location||'') + '</td>'
+        + '<td>' + datePart + '</td><td>' + timePart + '</td>'
+        + '<td class="no-print"><div class="item-table-actions">'
+        + '<button class="warning" onclick="startItemEdit(\'' + code + '\')">✏️ Modifica</button>'
+        + '<button class="danger" onclick="deleteItem(\'' + code + '\')">🗑 Elimina</button>'
+        + '</div></td></tr>';
+    }
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function setItemColFilter(column, value) {
+  if (value.trim() === '') delete itemColFilters[column];
+  else itemColFilters[column] = value;
+  renderItemMasterTable();
+}
+function clearItemColFilters() {
+  itemColFilters = {};
+  const s = document.getElementById('itemMasterSearch');
+  if (s) s.value = '';
+  renderItemMasterTable();
+}
+function startItemEdit(code) { editingItemCode = code; renderItemMasterTable(); }
+function cancelItemEdit()    { editingItemCode = null; renderItemMasterTable(); }
+
+async function saveItemEdit(code) {
+  const description = document.getElementById('edit_description').value.trim();
+  const unit        = document.getElementById('edit_unit').value.trim();
+  const defaultQty  = Number(document.getElementById('edit_defaultQty').value);
+  const valueStream = document.getElementById('edit_valueStream').value.trim();
+  const line        = document.getElementById('edit_line').value.trim();
+  const location    = document.getElementById('edit_location').value.trim();
+  if (!description || !unit || !valueStream || !line) {
+    alert('Compila tutti i campi'); return;
+  }
+  await fsSetItemMaster(code, {
+    description, unit, defaultQty, valueStream, line, location,
+    uploadDate: itemMaster[code]?.uploadDate || ''
+  });
+  editingItemCode = null;
+  alert('✅ Articolo ' + code + ' aggiornato!');
+}
+
+async function deleteItem(code) {
+  if (!confirm('Eliminare definitivamente l\'articolo ' + code + '?')) return;
+  await fsDeleteItemMaster(code);
+}
+
+// ============================================================
+// CODICI MANCANTI
+// ============================================================
+async function registerMissingCode(row) {
+  const exists = appMissingCodes.find(m =>
+    m.itemCode === row.itemCode &&
+    m.valueStream === row.valueStream &&
+    m.line === row.line
+  );
+  if (!exists) {
+    const n = nowParts();
+    const item = {
+      id:          makeId('MISS'),
+      itemCode:    row.itemCode,
+      description: row.description,
+      quantity:    row.quantity,
+      unit:        row.unit,
+      valueStream: row.valueStream,
+      line:        row.line,
+      location:    row.location || '',
+      priority:    row.priority || 'Normale',
+      user:        currentUser ? (currentUser.name + ' ' + currentUser.surname) : '',
+      insertDate:  n.date,
+      insertTime:  n.time,
+      codeStatus:  'Codice non presente in anagrafica'
+    };
+    await fsAddMissingCode(item);
+  }
+}
+
+function renderMissingCodesTable() {
+  const container = document.getElementById('missingCodesTableContainer');
+  if (!container) return;
+  if (!appMissingCodes.length) {
+    container.innerHTML = '<p class="muted">Nessun codice mancante.</p>'; return;
+  }
+  let html = '<table><thead><tr>'
+    + '<th>Codice</th><th>Descrizione</th><th>Qta</th><th>UM</th>'
+    + '<th>Value Stream</th><th>Linea</th><th>Utente</th>'
+    + '<th>Data</th><th>Ora</th><th>Stato</th>'
+    + '</tr></thead><tbody>';
+  appMissingCodes.forEach(m => {
+    const isInAnag  = itemMaster[m.itemCode] !== undefined;
+    const isPending = m.codeStatus === 'Codice non presente in anagrafica';
+    const color     = isPending ? '#dc2626' : '#16a34a';
+    html += '<tr>'
+      + '<td><strong>' + m.itemCode + '</strong></td>'
+      + '<td>' + escapeHtml(m.description||'') + '</td>'
+      + '<td>' + m.quantity + '</td><td>' + m.unit + '</td>'
+      + '<td>' + escapeHtml(m.valueStream||'') + '</td>'
+      + '<td>' + escapeHtml(m.line||'') + '</td>'
+      + '<td>' + escapeHtml(m.user||'') + '</td>'
+      + '<td>' + m.insertDate + '</td><td>' + m.insertTime + '</td>'
+      + '<td style="color:' + color + ';font-weight:bold;">'
+      + escapeHtml(m.codeStatus);
+    if (isInAnag && isPending) {
+      html += ' <button class="success"'
+            + ' style="padding:4px 8px;font-size:11px;margin:0;"'
+            + ' onclick="markCodeAsInserted(\'' + m.firestoreId + '\')">'
+            + '✅ Segna inserito</button>';
+    }
+    html += '</td></tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+async function markCodeAsInserted(firestoreId) {
+  await fsUpdateMissingCode(firestoreId, { codeStatus: 'Inserito in anagrafica' });
+}
+
+// ============================================================
+// BARCODE / DRAFT
+// ============================================================
+function handleBarcodeInput() {
+  const value = document.getElementById('barcodeInput').value.trim();
+  if (value.length > 0) {
+    clearTimeout(barcodeBufferTimeout);
+    barcodeBufferTimeout = setTimeout(() => {
+      if (value.includes('|')) addBarcodeDirectly();
+    }, 300);
+  }
+}
+
+function parseBarcode(raw) {
+  const trimmed = raw.trim();
+  if (trimmed.includes('|')) {
+    const parts = trimmed.split('|');
+    if (parts.length < 6) throw new Error(
+      'Data Matrix non valido.\nFormato: CODICE|DESCRIZIONE|UM|QTA|VALUESTREAM|LINEA'
+    );
+    const code = parts[0].trim().toUpperCase();
+    const qty  = Number(parts[3].trim());
+    if (!code) throw new Error('Codice mancante nel Data Matrix');
+    if (isNaN(qty) || qty <= 0) throw new Error('Quantità non valida: ' + parts[3]);
+    return {
+      itemCode: code, description: parts[1].trim(), quantity: qty,
+      unit: parts[2].trim(), valueStream: parts[4].trim(), line: parts[5].trim(),
+      location: itemMaster[code] ? (itemMaster[code].location || '') : '',
+      fromManual: false
+    };
+  }
+  const code = trimmed.toUpperCase();
+  const item = itemMaster[code];
+  if (!item) throw new Error('Codice "' + code + '" non trovato in anagrafica.');
+  return {
+    itemCode: code, description: item.description, quantity: item.defaultQty,
+    unit: item.unit, valueStream: item.valueStream, line: item.line,
+    location: item.location || '', fromManual: false
+  };
+}
+
+async function mergeOrAddDraftRow(parsed, priority, rawBarcode) {
+  const existing = draftRows.find(r =>
+    r.itemCode === parsed.itemCode &&
+    r.valueStream === parsed.valueStream &&
+    r.line === parsed.line
+  );
+  if (existing) {
+    existing.quantity += Number(parsed.quantity);
+    const pOrder = { 'Fermo linea':1, 'Urgente':2, 'Normale':3 };
+    if (pOrder[priority] < pOrder[existing.priority]) existing.priority = priority;
+    alert('✅ Quantità sommata!\nCodice: ' + parsed.itemCode +
+          '\nNuova quantità: ' + existing.quantity);
+  } else {
+    const n = nowParts();
+    draftRows.push({
+      id: makeId('DRAFT'), barcodeRaw: rawBarcode,
+      itemCode: parsed.itemCode, description: parsed.description,
+      quantity: Number(parsed.quantity), unit: parsed.unit,
+      valueStream: parsed.valueStream, line: parsed.line,
+      location: parsed.location || '', priority,
+      fromManual: parsed.fromManual || false,
+      insertDate: n.date, insertTime: n.time
+    });
+  }
+}
+
+async function addBarcodeDirectly() {
+  if (!currentUser) { alert('Effettua il login'); return; }
+  const raw      = document.getElementById('barcodeInput').value.trim();
+  const priority = document.getElementById('priorityInput').value;
+  if (!raw) return;
+  try {
+    const parsed = parseBarcode(raw);
+    await mergeOrAddDraftRow(parsed, priority, raw);
+    document.getElementById('barcodeInput').value = '';
+    document.getElementById('barcodeInput').focus();
+    beepSuccess(); renderDraftRows();
+  } catch (err) { beepError(); alert(err.message); }
+}
+
+function processBarcodeInput() {
+  const raw = document.getElementById('barcodeInput').value.trim();
+  if (!raw) { alert('Inserisci un codice'); return; }
+  addBarcodeDirectly();
+}
+
+function openManualForm() {
+  document.getElementById('manualForm').classList.toggle('hidden');
+}
+
+async function addManualRow() {
+  const code        = document.getElementById('manualCode').value.trim().toUpperCase();
+  const description = document.getElementById('manualDescription').value.trim();
+  const unit        = document.getElementById('manualUnit').value.trim();
+  const qty         = Number(document.getElementById('manualQty').value);
+  const vs          = document.getElementById('manualVS').value.trim();
+  const line        = document.getElementById('manualLine').value.trim();
+  const priority    = document.getElementById('priorityInput').value;
+  if (!code || !description || !unit || !qty || !vs || !line) {
+    alert('Compila tutti i campi (*)'); return;
+  }
+  const isInAnag = itemMaster[code] !== undefined;
+  const parsed = {
+    itemCode: code, description, quantity: qty, unit,
+    valueStream: vs, line,
+    location: itemMaster[code] ? (itemMaster[code].location || '') : '',
+    fromManual: !isInAnag
+  };
+  try {
+    await mergeOrAddDraftRow(parsed, priority, code);
+    if (!isInAnag) await registerMissingCode({ ...parsed, priority });
+    ['manualCode','manualDescription','manualUnit',
+     'manualQty','manualVS','manualLine'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('manualForm').classList.add('hidden');
+    beepSuccess(); renderDraftRows();
+  } catch (e) { alert(e.message); }
+}
+
+// MODIFICA QUANTITÀ
+function startQtyEdit(id) {
+  editingQtyId = id; editingLocationId = null; editingPriorityId = null;
+  renderDraftRows();
+}
+function saveQtyEdit(id) {
+  if (editingQtyId !== id) return;
+  const input = document.getElementById('qtyEditInput_' + id);
+  if (!input) return;
+  const newQty = Number(input.value);
+  if (isNaN(newQty) || newQty <= 0) { alert('Quantità non valida'); input.focus(); return; }
+  const row = draftRows.find(r => r.id === id);
+  if (row) row.quantity = newQty;
+  editingQtyId = null; renderDraftRows();
+}
+// MODIFICA UBICAZIONE
+function startLocationEdit(id) {
+  editingLocationId = id; editingQtyId = null; editingPriorityId = null;
+  renderDraftRows();
+}
+function saveLocationEdit(id) {
+  if (editingLocationId !== id) return;
+  const input = document.getElementById('locEditInput_' + id);
+  if (!input) return;
+  const row = draftRows.find(r => r.id === id);
+  if (row) row.location = input.value.trim();
+  editingLocationId = null; renderDraftRows();
+}
+// MODIFICA PRIORITÀ
+function startPriorityEdit(id) {
+  editingPriorityId = id; editingQtyId = null; editingLocationId = null;
+  renderDraftRows();
+}
+function savePriorityEdit(id) {
+  if (editingPriorityId !== id) return;
+  const input = document.getElementById('priEditInput_' + id);
+  if (!input) return;
+  const row = draftRows.find(r => r.id === id);
+  if (row) row.priority = input.value;
+  editingPriorityId = null; renderDraftRows();
+}
+
+function removeDraftRow(id) {
+  draftRows = draftRows.filter(r => r.id !== id); renderDraftRows();
+}
+function clearDraftRows() {
+  if (!draftRows.length) return;
+  if (!confirm('Svuotare tutte le righe?')) return;
+  draftRows = []; renderDraftRows();
+}
+
+function renderDraftRows() {
+  const container = document.getElementById('draftRowsContainer');
+  if (!container) return;
+  if (!draftRows.length) {
+    container.innerHTML = '<p class="muted">Nessuna riga caricata.</p>'; return;
+  }
+  const totQty = draftRows.reduce((s,r) => s + Number(r.quantity), 0);
+  let html = '<h3>Righe pronte da inviare'
+    + ' <span class="badge">' + draftRows.length + ' righe</span>'
+    + ' <span class="badge" style="background:#dcfce7;color:#166534;">'
+    + 'Qta totale: ' + totQty + '</span></h3>'
+    + '<table><thead><tr>'
+    + '<th>Codice</th><th>Descrizione</th>'
+    + '<th>Qta <span style="font-weight:normal;font-size:11px;color:#6b7280;">(clicca)</span></th>'
+    + '<th>UM</th><th>Value Stream</th><th>Linea</th>'
+    + '<th>Ubicazione <span style="font-weight:normal;font-size:11px;color:#6b7280;">(clicca)</span></th>'
+    + '<th>Priorità <span style="font-weight:normal;font-size:11px;color:#6b7280;">(clicca)</span></th>'
+    + '<th class="no-print">Azioni</th>'
+    + '</tr></thead><tbody>';
+
+  draftRows.forEach(r => {
+    const isEQ = (editingQtyId === r.id);
+    const qtaCell = isEQ
+      ? '<input id="qtyEditInput_' + r.id + '" type="number" min="1" value="' + r.quantity + '"'
+        + ' style="width:80px;padding:4px;border:2px solid #2563eb;border-radius:4px;"'
+        + ' onkeydown="if(event.key===\'Enter\') saveQtyEdit(\'' + r.id + '\')"'
+        + ' onblur="saveQtyEdit(\'' + r.id + '\')" />'
+      : '<span onclick="startQtyEdit(\'' + r.id + '\')" title="Clicca per modificare"'
+        + ' style="cursor:pointer;font-weight:bold;color:#2563eb;'
+        + 'text-decoration:underline dotted;padding:4px 8px;'
+        + 'border-radius:4px;background:#eff6ff;display:inline-block;">'
+        + r.quantity + '</span>';
+
+    const isEL = (editingLocationId === r.id);
+    const locCell = isEL
+      ? '<input id="locEditInput_' + r.id + '" type="text"'
+        + ' value="' + escapeHtml(r.location||'') + '" placeholder="Es. MC-A01-01"'
+        + ' style="width:120px;padding:4px;border:2px solid #16a34a;border-radius:4px;"'
+        + ' onkeydown="if(event.key===\'Enter\') saveLocationEdit(\'' + r.id + '\')"'
+        + ' onblur="saveLocationEdit(\'' + r.id + '\')" />'
+      : '<span onclick="startLocationEdit(\'' + r.id + '\')" title="Clicca per modificare"'
+        + ' style="cursor:pointer;color:#16a34a;text-decoration:underline dotted;'
+        + 'padding:4px 8px;border-radius:4px;background:#f0fdf4;'
+        + 'display:inline-block;min-width:40px;">'
+        + escapeHtml(r.location||'—') + '</span>';
+
+    const isEP = (editingPriorityId === r.id);
+    const priCell = isEP
+      ? '<select id="priEditInput_' + r.id + '"'
+        + ' style="padding:4px;border:2px solid #d97706;border-radius:4px;"'
+        + ' onchange="savePriorityEdit(\'' + r.id + '\')"'
+        + ' onblur="savePriorityEdit(\'' + r.id + '\')">'
+        + '<option value="Normale"'    + (r.priority==='Normale'    ?' selected':'') + '>Normale</option>'
+        + '<option value="Urgente"'    + (r.priority==='Urgente'    ?' selected':'') + '>Urgente</option>'
+        + '<option value="Fermo linea"'+ (r.priority==='Fermo linea'?' selected':'') + '>Fermo linea</option>'
+        + '</select>'
+      : '<span onclick="startPriorityEdit(\'' + r.id + '\')" style="cursor:pointer;">'
+        + priorityBadge(r.priority) + '</span>';
+
+    const manualBadge = r.fromManual
+      ? ' <span style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;'
+        + 'border-radius:4px;padding:1px 5px;font-size:10px;">⚠️ non in anag.</span>' : '';
+    const rowBg = (isEQ||isEL||isEP) ? ' style="background:#fefce8;"' : '';
+
+    html += '<tr' + rowBg + '>'
+      + '<td><strong>' + r.itemCode + '</strong>' + manualBadge + '</td>'
+      + '<td>' + r.description + '</td>'
+      + '<td>' + qtaCell + '</td>'
+      + '<td>' + r.unit + '</td>'
+      + '<td>' + r.valueStream + '</td>'
+      + '<td>' + r.line + '</td>'
+      + '<td>' + locCell + '</td>'
+      + '<td>' + priCell + '</td>'
+      + '<td class="no-print">'
+      + '<button class="danger" onclick="removeDraftRow(\'' + r.id + '\')">'
+      + '🗑 Rimuovi</button>'
+      + '</td></tr>';
+  });
+
+  html += '</tbody></table>'
+        + '<div style="margin-top:10px;">'
+        + '<button class="secondary" onclick="clearDraftRows()">🗑 Svuota tutto</button>'
+        + '</div>';
+  container.innerHTML = html;
+
+  if (editingQtyId) {
+    const i = document.getElementById('qtyEditInput_' + editingQtyId);
+    if (i) { i.focus(); i.select(); }
+  }
+  if (editingLocationId) {
+    const i = document.getElementById('locEditInput_' + editingLocationId);
+    if (i) { i.focus(); i.select(); }
+  }
+  if (editingPriorityId) {
+    const i = document.getElementById('priEditInput_' + editingPriorityId);
+    if (i) i.focus();
+  }
+}
+
+async function sendDraftRequests() {
+  if (!draftRows.length) { alert('Aggiungi almeno una riga'); return; }
+  const n = nowParts();
+  const batch = db.batch();
+  const prodBatch = db.batch();
+
+  draftRows.forEach(row => {
+    const reqObj = {
+      id: makeId('REQ'), barcodeRaw: row.barcodeRaw || '',
+      itemCode: row.itemCode, description: row.description,
+      quantity: row.quantity, unit: row.unit,
+      valueStream: row.valueStream, line: row.line,
+      location: row.location || '', priority: row.priority,
+      user: currentUser.name + ' ' + currentUser.surname,
+      userEmail: currentUser.email,
+      requestDate: n.date, requestTime: n.time, requestIso: n.iso,
+      insertDate: row.insertDate || n.date,
+      insertTime: row.insertTime || n.time,
+      status: 'Richiesto', pickingListCode: '', selected: false
+    };
+    batch.set(db.collection('requests').doc(reqObj.id), reqObj);
+    prodBatch.set(db.collection('productionHistory').doc(reqObj.id), reqObj);
+  });
+
+  await batch.commit();
+  await prodBatch.commit();
+
+  const count = draftRows.length;
+  draftRows = [];
+  renderDraftRows();
+  alert('✅ ' + count + ' righe inviate al magazzino!');
+}
+
+function downloadDraftExcel() {
+  if (!draftRows.length) { alert('Nessuna richiesta da esportare'); return; }
+  const today   = new Date();
+  const dateKey = String(today.getDate()).padStart(2,'0') + '-'
+                + String(today.getMonth()+1).padStart(2,'0') + '-'
+                + today.getFullYear();
+  const storageKey = 'dailyCounters';
+  let counters = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  counters[dateKey] = (counters[dateKey] || 0) + 1;
+  localStorage.setItem(storageKey, JSON.stringify(counters));
+  const fileName = dateKey + '_' + counters[dateKey] + '.csv';
+  downloadCsv(fileName, draftRows.map(r => ({
+    Codice: r.itemCode, Descrizione: r.description,
+    Quantita: r.quantity, UM: r.unit,
+    ValueStream: r.valueStream, Linea: r.line,
+    Ubicazione: r.location || '', Priorita: r.priority
+  })));
+  alert('File: ' + fileName);
+}
+
+// ============================================================
+// MAGAZZINO
+// ============================================================
+function priorityBadge(p) {
+  if (p === 'Fermo linea') return '<span class="badge danger">Fermo linea</span>';
+  if (p === 'Urgente')     return '<span class="badge warning">Urgente</span>';
+  return '<span class="badge">Normale</span>';
+}
+function normalizeFilterValue(v) {
+  const t = String(v??'').trim(); return t==='' ? '__EMPTY__' : t;
+}
+function displayFilterValue(v) { return v==='__EMPTY__' ? '(Vuoto)' : v; }
+function safeJson(v) {
+  return JSON.stringify(v).replaceAll('<','\u003C').replaceAll('>','\u003E');
+}
+function getCellValue(row, col) { return String(row[col] ?? ''); }
+
+function getAvailableFilterValues(column) {
+  const viewMode = document.getElementById('viewMode')?.value || 'detail';
+  let rows = appRequests.filter(r =>
+  r.status !== 'Fine picking' && r.status !== 'In fase di Picking'
+);
+  if (viewMode === 'grouped') {
+    const map = new Map();
+    rows.filter(r => !r.pickingListCode).forEach(r => {
+      const key = r.itemCode+'|'+r.valueStream+'|'+r.line+'|'+r.unit;
+      if (!map.has(key)) map.set(key, { ...r, id:key, quantity:0, groupedIds:[] });
+      const t = map.get(key);
+      t.quantity += Number(r.quantity); t.groupedIds.push(r.id);
+    });
+    rows = Array.from(map.values());
+  }
+  Object.entries(columnFilters).forEach(([fc, sv]) => {
+    if (fc === column || !sv || !sv.length) return;
+    rows = rows.filter(r => sv.includes(normalizeFilterValue(getCellValue(r, fc))));
+  });
+  return Array.from(new Set(rows.map(r =>
+    normalizeFilterValue(getCellValue(r, column))
+  ))).sort((a,b) => displayFilterValue(a).localeCompare(displayFilterValue(b),'it'));
+}
+
+function toggleFilterMenu(column) {
+  openFilterColumn = openFilterColumn === column ? null : column;
+  renderRequestsTable();
+}
+function setExcelFilterValue(column, value, checked) {
+  const allValues = getAvailableFilterValues(column);
+  if (!columnFilters[column]) columnFilters[column] = [...allValues];
+  if (checked && !columnFilters[column].includes(value)) columnFilters[column].push(value);
+  if (!checked) columnFilters[column] = columnFilters[column].filter(v => v !== value);
+  const sel = columnFilters[column];
+  const allSel = allValues.length === sel.length && allValues.every(v => sel.includes(v));
+  if (sel.length === 0) columnFilters[column] = [];
+  else if (allSel) delete columnFilters[column];
+  renderRequestsTable();
+}
+function selectAllFilterValues(column) {
+  columnFilters[column] = getAvailableFilterValues(column); renderRequestsTable();
+}
+function clearSingleColumnFilter(column) { delete columnFilters[column]; renderRequestsTable(); }
+function clearColumnFilters() { columnFilters = {}; openFilterColumn = null; renderRequestsTable(); }
+
+function renderExcelFilter(column) {
+  const values   = getAvailableFilterValues(column);
+  const selected = columnFilters[column] || [];
+  const label    = selected.length > 0 ? 'Filtro attivo (' + selected.length + ')' : 'Tutti';
+  let html = '<div class="excel-filter no-print">'
+    + '<button class="filter-button" onclick="event.stopPropagation();'
+    + 'toggleFilterMenu(\'' + column + '\')">▼ ' + label + '</button>';
+  if (openFilterColumn === column) {
+    html += '<div class="filter-menu" onclick="event.stopPropagation()">'
+      + '<div class="filter-actions">'
+      + '<button onclick="selectAllFilterValues(\'' + column + '\')">Seleziona tutto</button>'
+      + '<button class="secondary" onclick="clearSingleColumnFilter(\''
+      + column + '\')">Pulisci</button></div>';
+    values.forEach(value => {
+      const chk = selected.length === 0 || selected.includes(value);
+      html += '<label><input type="checkbox" ' + (chk?'checked':'')
+        + ' onchange=\'setExcelFilterValue(' + safeJson(column) + ','
+        + safeJson(value) + ',this.checked)\'> ' + displayFilterValue(value) + '</label>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function getVisibleRequests() {
+  const viewMode = document.getElementById('viewMode')?.value || 'detail';
+  let rows = appRequests.filter(r =>
+  r.status !== 'Fine picking' && r.status !== 'In fase di Picking'
+);
+  if (viewMode === 'grouped') {
+    const map = new Map();
+    rows.filter(r => !r.pickingListCode).forEach(r => {
+      const key = r.itemCode+'|'+r.valueStream+'|'+r.line+'|'+r.unit;
+      if (!map.has(key)) map.set(key, { ...r, id:key, quantity:0, groupedIds:[] });
+      const t = map.get(key); t.quantity += Number(r.quantity); t.groupedIds.push(r.id);
+    });
+    rows = Array.from(map.values());
+  }
+  Object.entries(columnFilters).forEach(([col, sv]) => {
+    if (!sv || !sv.length) return;
+    rows = rows.filter(r => sv.includes(normalizeFilterValue(getCellValue(r, col))));
+  });
+  const pOrder = { 'Fermo linea':1, 'Urgente':2, 'Normale':3 };
+  rows.sort((a,b) => {
+    const pa = pOrder[a.priority||'Normale']; const pb = pOrder[b.priority||'Normale'];
+    if (pa !== pb) return pa - pb;
+    const av = a[sortState.column] || ''; const bv = b[sortState.column] || '';
+    if (av < bv) return sortState.direction==='asc' ? -1 : 1;
+    if (av > bv) return sortState.direction==='asc' ?  1 : -1;
+    return 0;
+  });
+  return rows;
+}
+
+function sortBy(column) {
+  sortState = sortState.column === column
+    ? { column, direction: sortState.direction==='asc' ? 'desc' : 'asc' }
+    : { column, direction: 'asc' };
+  renderRequestsTable();
+}
+
+function renderRequestsTable() {
+  const container = document.getElementById('requestsTableContainer');
+  if (!container) return;
+  const rows = getVisibleRequests();
+  let html = '<table><thead><tr><th class="no-print">Flag</th>';
+  requestColumns.forEach(([key, label]) => {
+    html += '<th><div style="cursor:pointer" onclick="sortBy(\'' + key + '\')">'
+          + label + '</div>' + renderExcelFilter(key) + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr><td class="no-print"><input type="checkbox" '
+          + (r.selected?'checked':'')
+          + ' onchange="setSelected(\'' + r.firestoreId + '\',this.checked)"></td>';
+    requestColumns.forEach(([key]) => {
+      if (key === 'priority') html += '<td>' + priorityBadge(r.priority||'Normale') + '</td>';
+      else html += '<td>' + (r[key]||'') + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = rows.length ? html : '<p class="muted">Nessuna richiesta.</p>';
+}
+
+async function setSelected(firestoreId, value) {
+  const viewMode = document.getElementById('viewMode')?.value || 'detail';
+  if (viewMode === 'grouped') {
+    const row = getVisibleRequests().find(r => r.firestoreId === firestoreId);
+    if (row?.groupedIds) {
+      const batch = db.batch();
+      appRequests.forEach(r => {
+        if (row.groupedIds.includes(r.id)) {
+          batch.update(db.collection('requests').doc(r.firestoreId), { selected: value });
+        }
+      });
+      await batch.commit();
+    }
+  } else {
+    await fsUpdateRequest(firestoreId, { selected: value });
+  }
+}
+
+async function toggleSelectAll(value) {
+  const ids = getVisibleRequests().flatMap(r => r.groupedIds || [r.firestoreId]);
+  const batch = db.batch();
+  appRequests.forEach(r => {
+    if (ids.includes(r.firestoreId) || ids.includes(r.id)) {
+      batch.update(db.collection('requests').doc(r.firestoreId), { selected: value });
+    }
+  });
+  await batch.commit();
+}
+
+// ============================================================
+// STAMPA PER VALUE STREAM
+// ============================================================
+function printByValueStream() {
+  const selected = appRequests.filter(r => r.selected);
+  if (!selected.length) {
+    alert('Seleziona almeno una riga (flagga con il checkbox)'); return;
+  }
+  const vsOrder = [];
+  const vsMap   = new Map();
+  selected.forEach(r => {
+    const vs = r.valueStream || '(nessuna VS)';
+    if (!vsMap.has(vs)) { vsMap.set(vs, []); vsOrder.push(vs); }
+    vsMap.get(vs).push(r);
+  });
+  const now           = new Date();
+  const printDateTime = now.toLocaleDateString('it-IT') + ' ore '
+                      + now.toLocaleTimeString('it-IT');
+  const n             = nowParts();
+  const pickingCode   = makeId('PICK');
+
+  let printContent = '';
+  vsOrder.forEach(vs => {
+    const rows      = vsMap.get(vs);
+    const totalRows = rows.length;
+    const totQty    = rows.reduce((s, r) => s + Number(r.quantity), 0);
+    printContent +=
+      '<div class="print-vs-block">' +
+      '<div class="print-header" style="margin-bottom:10px;border-bottom:2px solid #111827;padding-bottom:8px;">' +
+      '<table style="width:100%;border-collapse:collapse;">' +
+      '<tr>' +
+      '<td style="padding:4px;font-size:18px;font-weight:bold;border:none;">' +
+        'Lista Picking: ' + escapeHtml(pickingCode) + '</td>' +
+      '<td style="padding:4px;text-align:right;font-size:12px;border:none;">' +
+        'Stampato il: ' + printDateTime + '</td>' +
+      '</tr><tr>' +
+      '<td style="padding:4px;font-size:15px;border:none;">' +
+        'Value Stream: <strong>' + escapeHtml(vs) + '</strong></td>' +
+      '<td style="padding:4px;text-align:right;font-size:13px;border:none;">' +
+        'Righe: <strong>' + totalRows + '</strong>' +
+        ' | Qta totale: <strong>' + totQty + '</strong></td>' +
+      '</tr></table></div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:11px;">' +
+      '<thead><tr style="background:#d1d5db;">' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Codice</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Descrizione</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Qta</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">UM</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Linea</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Ubicazione</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Priorità</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Utente</th>' +
+      '<th style="border:1px solid #6b7280;padding:5px;">Data richiesta</th>' +
+      '</tr></thead><tbody>';
+    rows.forEach((r, idx) => {
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f3f4f6';
+      printContent +=
+        '<tr style="background:' + bg + ';">' +
+        '<td style="border:1px solid #6b7280;padding:5px;font-weight:bold;">' + escapeHtml(r.itemCode||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' + escapeHtml(r.description||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;text-align:center;">' + (r.quantity||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' + escapeHtml(r.unit||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' + escapeHtml(r.line||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' + escapeHtml(r.location||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' + escapeHtml(r.priority||'Normale') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' + escapeHtml(r.user||'') + '</td>' +
+        '<td style="border:1px solid #6b7280;padding:5px;">' +
+          escapeHtml((r.requestDate||'') + ' ' + (r.requestTime||'')) + '</td>' +
+        '</tr>';
+    });
+    printContent += '</tbody></table></div>';
+  });
+
+  const printArea = document.getElementById('printArea');
+  printArea.innerHTML = printContent;
+
+  setTimeout(() => {
+    window.print();
+    setTimeout(async () => {
+      const doMove = confirm(
+        'Stampa completata!\nVuoi spostare le righe in "In fase di Picking"?\n' +
+        'Lista picking: ' + pickingCode
+      );
+      printArea.innerHTML = '';
+      if (!doMove) return;
+
+      const toMove = selected.filter(r => !r.pickingListCode);
+      if (!toMove.length) { alert('Righe già in lista picking.'); return; }
+
+      const batch = db.batch();
+      toMove.forEach(r => {
+        batch.update(db.collection('requests').doc(r.firestoreId), {
+          status: 'In fase di Picking',
+          pickingListCode: pickingCode,
+          selected: false,
+          inPickingDate: n.date,
+          inPickingTime: n.time,
+          inPickingIso:  n.iso
+        });
+      });
+      await batch.commit();
+
+      await fsAddPickingList({
+        code: pickingCode, status: 'In picking',
+        createdDate: n.date, createdTime: n.time, createdIso: n.iso,
+        startStorageDate:'', startStorageTime:'',
+        endStorageDate:'',   endStorageTime:''
+      });
+
+      alert('✅ Lista picking creata: ' + pickingCode);
+      showPanel('pickingPanel');
+    }, 500);
+  }, 100);
+}
+
+// ============================================================
+// PICKING
+// ============================================================
+function renderPickingTable() {
+  const container = document.getElementById('pickingTableContainer');
+  if (!container) return;
+  if (!appPickingLists.length) {
+    container.innerHTML = '<p class="muted">Nessuna lista picking.</p>'; return;
+  }
+  let html = '<table><thead><tr>'
+    + '<th>Codice lista</th><th>Barcode</th>'
+    + '<th>Data creazione</th><th>Ora creazione</th>'
+    + '<th>Stato</th><th>Righe</th><th class="no-print">Azioni</th>'
+    + '</tr></thead><tbody>';
+  appPickingLists.forEach(list => {
+    const lines = appRequests.filter(r => r.pickingListCode === list.code);
+    html += '<tr>'
+      + '<td>' + list.code + '</td>'
+      + '<td><strong>*' + list.code + '*</strong></td>'
+      + '<td>' + list.createdDate + '</td>'
+      + '<td>' + list.createdTime + '</td>'
+      + '<td><span class="badge">' + list.status + '</span></td>'
+      + '<td>' + lines.length + '</td>'
+      + '<td class="no-print">'
+      + '<button onclick="addSelectedRowsToPickingList(\'' + list.code + '\')">'
+      + 'Aggiungi flaggate</button>'
+      + '<button class="success" onclick="finishPicking(\'' + list.code + '\')">'
+      + 'Fine picking</button>'
+      + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+async function addSelectedRowsToPickingList(code) {
+  const toAdd = appRequests.filter(r => r.selected && !r.pickingListCode);
+  if (!toAdd.length) { alert('Flagga prima righe libere'); return; }
+  const n = nowParts();
+  const batch = db.batch();
+  toAdd.forEach(r => {
+    batch.update(db.collection('requests').doc(r.firestoreId), {
+      status: 'In fase di Picking', pickingListCode: code,
+      selected: false,
+      inPickingDate: n.date, inPickingTime: n.time, inPickingIso: n.iso
+    });
+  });
+  await batch.commit();
+  alert('Righe aggiunte alla lista picking');
+}
+
+async function finishPicking(code) {
+  if (!confirm('Confermi Fine picking?')) return;
+  const n    = nowParts();
+  const rows = appRequests.filter(r => r.pickingListCode === code);
+  const batch = db.batch();
+
+  // aggiorna picking list
+  batch.update(db.collection('pickingLists').doc(code), {
+    status: 'Fine picking',
+    endPickingDate: n.date, endPickingTime: n.time, endPickingIso: n.iso
+  });
+
+  // sposta righe in storico e le elimina dalle requests
+  for (const r of rows) {
+    const histItem = {
+      ...r, status: 'Fine picking',
+      endPickingDate: n.date, endPickingTime: n.time, endPickingIso: n.iso
+    };
+    batch.set(db.collection('history').doc(r.id), histItem);
+    batch.delete(db.collection('requests').doc(r.firestoreId));
+  }
+  await batch.commit();
+}
+
+async function setPickingListStatusFromBarcode(newStatus) {
+  const code = document.getElementById('pickingCodeInput')
+                 .value.trim().replaceAll('*','');
+  if (!code) { alert('Inserisci il codice lista'); return; }
+  const list = appPickingLists.find(l => l.code === code);
+  if (!list) { alert('Lista non trovata'); return; }
+  const n = nowParts();
+  const data = { status: newStatus };
+  if (newStatus === 'Inizio stoccaggio') {
+    data.startStorageDate = n.date; data.startStorageTime = n.time;
+    data.startStorageIso  = n.iso;
+  }
+  if (newStatus === 'Fine stoccaggio') {
+    data.endStorageDate = n.date; data.endStorageTime = n.time;
+    data.endStorageIso  = n.iso;
+  }
+  await fsUpdatePickingList(code, data);
+  alert('Stato lista ' + code + ' → ' + newStatus);
+}
+
+// ============================================================
+// STORICO
+// ============================================================
+function renderHistoryTable() {
+  const container = document.getElementById('historyPickingContainer');
+  if (!container) return;
+  if (!appHistory.length) {
+    container.innerHTML = '<p class="muted">Storico picking vuoto.</p>'; return;
+  }
+  let html = '<table><thead><tr>'
+    + '<th>Codice</th><th>Descrizione</th><th>Qta</th><th>UM</th>'
+    + '<th>Value Stream</th><th>Linea</th><th>Ubicazione</th>'
+    + '<th>Priorità</th><th>Utente</th>'
+    + '<th>Lista picking</th><th>Data richiesta</th><th>Ora richiesta</th>'
+    + '<th>Fine picking</th></tr></thead><tbody>';
+  appHistory.forEach(r => {
+    html += '<tr>'
+      + '<td>' + r.itemCode + '</td><td>' + r.description + '</td>'
+      + '<td>' + r.quantity + '</td><td>' + r.unit + '</td>'
+      + '<td>' + (r.valueStream||'') + '</td><td>' + (r.line||'') + '</td>'
+      + '<td>' + (r.location||'') + '</td>'
+      + '<td>' + priorityBadge(r.priority||'Normale') + '</td>'
+      + '<td>' + (r.user||'') + '</td>'
+      + '<td>' + r.pickingListCode + '</td>'
+      + '<td>' + r.requestDate + '</td><td>' + r.requestTime + '</td>'
+      + '<td>' + (r.endPickingDate||'') + ' ' + (r.endPickingTime||'') + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function renderProductionHistoryTable() {
+  const container = document.getElementById('historyProductionContainer');
+  if (!container) return;
+  if (!appProductionHistory.length) {
+    container.innerHTML = '<p class="muted">Nessuna richiesta nello storico.</p>'; return;
+  }
+  let html = '<table><thead><tr>'
+    + '<th>Codice</th><th>Descrizione</th><th>Qta</th><th>UM</th>'
+    + '<th>Value Stream</th><th>Linea</th><th>Ubicazione</th>'
+    + '<th>Priorità</th><th>Utente</th>'
+    + '<th>Data draft</th><th>Ora draft</th>'
+    + '<th>Data invio</th><th>Ora invio</th>'
+    + '<th>Lista picking</th>'
+    + '</tr></thead><tbody>';
+  appProductionHistory.forEach(r => {
+    html += '<tr>'
+      + '<td><strong>' + r.itemCode + '</strong></td>'
+      + '<td>' + escapeHtml(r.description||'') + '</td>'
+      + '<td>' + r.quantity + '</td><td>' + r.unit + '</td>'
+      + '<td>' + escapeHtml(r.valueStream||'') + '</td>'
+      + '<td>' + escapeHtml(r.line||'') + '</td>'
+      + '<td>' + escapeHtml(r.location||'') + '</td>'
+      + '<td>' + priorityBadge(r.priority||'Normale') + '</td>'
+      + '<td>' + escapeHtml(r.user||'') + '</td>'
+      + '<td>' + (r.insertDate||'') + '</td><td>' + (r.insertTime||'') + '</td>'
+      + '<td>' + (r.requestDate||'') + '</td><td>' + (r.requestTime||'') + '</td>'
+      + '<td>' + (r.pickingListCode||'—') + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+function downloadHistoryExcel() {
+  downloadCsv('storico_picking.csv', appHistory);
+}
+function downloadProductionHistoryExcel() {
+  if (!appProductionHistory.length) {
+    alert('Nessun dato nello storico produzione'); return;
+  }
+  downloadCsv('storico_produzione.csv', appProductionHistory);
+}
+function downloadRequestsExcel() {
+  downloadCsv('richieste_magazzino.csv', appRequests);
+}
+
+// ============================================================
+// ADMIN UTENTI
+// ============================================================
+async function createUser() {
+  if (!currentUser || currentUser.role !== 'admin') {
+    alert('Solo admin'); return;
+  }
+  const name     = document.getElementById('newUserName').value.trim();
+  const surname  = document.getElementById('newUserSurname').value.trim();
+  const email    = document.getElementById('newUserEmail').value.trim().toLowerCase();
+  const password = document.getElementById('newUserPassword').value;
+  const role     = document.getElementById('newUserRole').value;
+  if (!name||!surname||!email||!password||!role) {
+    alert('Compila tutti i campi'); return;
+  }
+  if (password.length < 6) { alert('Password minimo 6 caratteri'); return; }
+  if (appUsers.some(u => u.email.toLowerCase() === email)) {
+    alert('Email già esistente'); return;
+  }
+  const newUser = {
+    id: makeId('USR'), name, surname, email, password, role,
+    barcode: 'USER|' + email
+  };
+  await fsAddUser(newUser);
+  ['newUserName','newUserSurname','newUserEmail','newUserPassword'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  alert('Utente creato');
+}
+
+async function deleteUser(userId) {
+  const user = appUsers.find(u => u.id === userId);
+  if (!user) return;
+  if (user.email === 'admin@azienda.it') {
+    alert('Non puoi eliminare l\'admin iniziale'); return;
+  }
+  if (!confirm('Eliminare ' + user.name + ' ' + user.surname + '?')) return;
+  await fsDeleteUser(user.firestoreId);
+}
+
+function renderUsersTable() {
+  const container = document.getElementById('usersTableContainer');
+  if (!container) return;
+  let html = '<table><thead><tr>'
+    + '<th>Nome</th><th>Cognome</th><th>Email</th>'
+    + '<th>Profilo</th><th>Barcode</th><th class="no-print">Azioni</th>'
+    + '</tr></thead><tbody>';
+  appUsers.forEach(u => {
+    html += '<tr>'
+      + '<td>' + u.name + '</td><td>' + u.surname + '</td>'
+      + '<td>' + u.email + '</td><td>' + u.role + '</td>'
+      + '<td><strong>*' + u.barcode + '*</strong><br>'
+      + '<span class="muted">' + u.barcode + '</span></td>'
+      + '<td class="no-print"><button class="danger" onclick="deleteUser(\''
+      + u.id + '\')">Elimina</button></td></tr>';
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ============================================================
+// FOTOCAMERA
+// ============================================================
+async function openCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Browser non supporta fotocamera.'); return;
+  }
+  if (typeof jsQR === 'undefined') {
+    alert('Libreria scansione non caricata.'); return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:{ ideal:'environment' },
+               width:{ ideal:1280 }, height:{ ideal:720 } }
+    });
+    const video = document.getElementById('cameraVideo');
+    video.srcObject = cameraStream;
+    await video.play();
+    document.getElementById('cameraContainer').style.display = 'block';
+    document.getElementById('closeCameraBtn').style.display  = 'inline-flex';
+    document.getElementById('cameraStatus').innerText = '📷 Punta sul Data Matrix...';
+    cameraScanInterval = setInterval(scanCameraFrame, 200);
+  } catch (err) {
+    if (err.name === 'NotAllowedError')
+      alert('Accesso fotocamera negato. Consenti nelle impostazioni.');
+    else alert('Errore fotocamera: ' + err.message);
+  }
+}
+function closeCamera() {
+  if (cameraScanInterval) { clearInterval(cameraScanInterval); cameraScanInterval = null; }
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  document.getElementById('cameraContainer').style.display = 'none';
+  document.getElementById('closeCameraBtn').style.display  = 'none';
+  document.getElementById('cameraStatus').innerText = '';
+}
+function scanCameraFrame() {
+  const video  = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('cameraCanvas');
+  if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const code = jsQR(imageData.data, imageData.width, imageData.height,
+    { inversionAttempts:'dontInvert' });
+  if (code && code.data) {
+    const raw = code.data.trim();
+    document.getElementById('cameraStatus').innerText = '✅ Letto: ' + raw;
+    closeCamera();
+    document.getElementById('barcodeInput').value = raw;
+    addBarcodeDirectly();
+  }
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  renderDraftRows();
+  renderRequestsTable();
+  renderPickingTable();
+  renderHistoryTable();
+  if (currentHistoryTab === 'production') renderProductionHistoryTable();
+  renderUsersTable();
+  renderMissingCodesTable();
+  updateMissingCodesBtnColor();
+}
+
+// ============================================================
+// INIT - avvio app
+// ============================================================
+(async () => {
+  await initAdminIfNeeded();
+  startRealtimeListeners();
+})();
+</script>
+</body>
+</html>

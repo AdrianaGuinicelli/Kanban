@@ -913,7 +913,16 @@ function downloadItemMasterTemplate() {
     rows = Object.entries(itemMaster).map(([code, item]) => ({
       Codice: code, Descrizione: item.description, UM: item.unit,
       Quantita_Default: item.defaultQty, Value_Stream: item.valueStream,
-      Linea: item.line, Ubicazione: item.location || ''
+      Linea: item.line, Ubicazione: item.location || '',
+// NUOVA COLONNA
+CodiceCompleto: [
+  code,
+  item.description,
+  item.unit,
+  item.defaultQty,
+  item.valueStream,
+  item.line
+].map(v => (v || "").toString().trim()).join("|")
     }));
   } else {
     rows = [{ Codice:'', Descrizione:'', UM:'',
@@ -1259,6 +1268,16 @@ async function addBarcodeDirectly() {
   if (!raw) return;
   try {
     const parsed = parseBarcode(raw);
+// ✅ CONTROLLO SE CODICE È IN ANAGRAFICA
+const isInAnag = itemMaster[parsed.itemCode] !== undefined;
+
+if (!isInAnag) {
+  await registerMissingCode({
+    ...parsed,
+    priority
+  });
+}
+
     await mergeOrAddDraftRow(parsed, priority, raw);
     document.getElementById('barcodeInput').value = '';
     document.getElementById('barcodeInput').focus();
@@ -2146,5 +2165,3 @@ function renderAll() {
 </script>
 </body>
 </html>
-``
-

@@ -163,6 +163,7 @@
     <button onclick="showPanel('pickingPanel')">Liste picking</button>
     <button onclick="showPanel('historyPanel')">Storico</button>
     <button onclick="showPanel('adminUsersPanel')">Gestione utenti</button>
+<button onclick="openProfile()">👤 Profilo</button>
     <button class="secondary" onclick="logout()">Logout</button>
     <button onclick="toggleUploadPanel()" id="uploadBtn">📦 Carica anagrafica</button>
     <button onclick="toggleMissingCodesPanel()" id="missingCodesBtn">⚠️ Codici mancanti</button>
@@ -318,6 +319,21 @@
     <button onclick="createUser()">Crea utente</button>
     <div id="usersTableContainer"></div>
   </section>
+
+<section id="profilePanel" class="card hidden">
+  <h2>Profilo utente</h2>
+
+  <label>Nome</label>
+  <input id="profileName" />
+
+  <label>Cognome</label>
+  <input id="profileSurname" />
+
+  <label>Password</label>
+  <input id="profilePassword" type="password" />
+
+  <button onclick="saveProfile()">💾 Salva</button>
+</section>
 
   <!-- PANNELLO ANAGRAFICA -->
   <div id="uploadPanel" class="card hidden" style="background:#f9fafb;">
@@ -697,6 +713,10 @@ function loginWithPassword() {
 function setLoggedUser(user) {
   currentUser = user;
 
+
+ // ✅ salva sessione
+  localStorage.setItem("currentUser", JSON.stringify(user));
+
   // 🔴 CONTROLLO PRIMO ACCESSO
   if (user.mustChangePassword) {
     alert('Devi cambiare la password al primo accesso');
@@ -751,7 +771,48 @@ async function saveNewPassword() {
   applyRoleVisibility();
 }
 
-function logout() { currentUser = null; location.reload(); }
+function logout() {
+  currentUser = null;
+  localStorage.removeItem("currentUser");
+  location.reload();
+}
+
+// ============================================================
+// 👤 PROFILO UTENTE
+// ============================================================
+
+function openProfile() {
+  showPanel('profilePanel');
+
+  document.getElementById('profileName').value = currentUser.name;
+  document.getElementById('profileSurname').value = currentUser.surname;
+}
+
+async function saveProfile() {
+  const name = document.getElementById('profileName').value;
+  const surname = document.getElementById('profileSurname').value;
+  const password = document.getElementById('profilePassword').value;
+
+  let updateData = {
+    name,
+    surname
+  };
+
+  if (password && password.length >= 6) {
+    updateData.password = password;
+  }
+
+  await db.collection('users')
+    .doc(currentUser.firestoreId)
+    .update(updateData);
+
+  alert("✅ Profilo aggiornato");
+
+  // aggiorna dati locali
+  Object.assign(currentUser, updateData);
+
+  localStorage.setItem("currentUser", JSON.stringify(currentUser));
+}
 
 function applyRoleVisibility() {
   const buttons    = document.querySelectorAll('#mainNav button');
@@ -2144,19 +2205,35 @@ function renderAll() {
 // ============================================================
 (async () => {
   try {
-    // ✅ NON bloccare l'avvio (fondamentale)
+    // ✅ NON bloccare avvio
     initAdminIfNeeded().catch(err => {
       console.warn("Init admin fallito:", err);
     });
 
-    // ✅ avvia subito i listener Firestore
+    // ✅ avvia listener Firestore
     startRealtimeListeners();
+
+    // ✅ 👇 QUI VA IL RIPRISTINO UTENTE
+    setTimeout(() => {
+      const savedUser = localStorage.getItem("currentUser");
+
+      if (savedUser) {
+        const user = JSON.parse(savedUser);
+
+        // ✅ usa i dati aggiornati da Firestore
+        const updatedUser = appUsers.find(u => u.email === user.email);
+
+        if (updatedUser) {
+          setLoggedUser(updatedUser);
+        }
+      }
+    }, 1000); // piccolo ritardo per aspettare i listener
 
   } catch (err) {
     console.error("Errore init:", err);
   }
 
-  // ✅ fallback anti-blocco UI
+  // fallback UI
   setTimeout(() => {
     hideLoading();
   }, 3000);
@@ -2165,3 +2242,4 @@ function renderAll() {
 </script>
 </body>
 </html>
+``

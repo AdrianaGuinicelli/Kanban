@@ -1896,7 +1896,27 @@ function downloadProductionHistoryExcel() {
   downloadCsv('storico_produzione.csv', appProductionHistory);
 }
 function downloadRequestsExcel() {
-  downloadCsv('richieste_magazzino.csv', appRequests);
+  const rows = getVisibleRequests();
+
+  if (!rows.length) {
+    alert('Nessuna richiesta da esportare');
+    return;
+  }
+
+  downloadCsv('richieste_produzione_magazzino.csv', rows.map(r => ({
+    'Codice articolo': r.itemCode || '',
+    'Descrizione': r.description || '',
+    'Quantità': r.quantity || '',
+    'UM': r.unit || '',
+    'Value Stream': r.valueStream || '',
+    'Linea': r.line || '',
+    'Ubicazione': r.location || '',
+    'Priorità': r.priority || '',
+    'Utente': r.user || '',
+    'Data richiesta': r.requestDate || '',
+    'Ora richiesta': r.requestTime || '',
+    'Lista picking': r.pickingListCode || ''
+  })));
 }
 
 // ============================================================

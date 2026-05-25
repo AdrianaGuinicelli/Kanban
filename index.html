@@ -670,13 +670,72 @@ function loginWithPassword() {
 }
 function setLoggedUser(user) {
   currentUser = user;
+
+  // 🔴 CONTROLLO PRIMO ACCESSO
+  if (user.mustChangePassword) {
+    alert('Devi cambiare la password al primo accesso');
+    showChangePasswordPanel();
+    return;
+  }
+
   document.getElementById('userInfo').innerHTML =
     user.name + ' ' + user.surname +
     ' <span class="badge">' + user.role + '</span>';
+
   document.getElementById('loginCard').classList.add('hidden');
   document.getElementById('mainNav').classList.remove('hidden');
+
   applyRoleVisibility();
 }
+
+<section id="changePasswordPanel" class="card hidden">
+  <h2>Modifica password</h2>
+
+  <label>Nuova password</label>
+  <input id="newPassword" type="password" />
+
+  <label>Conferma password</label>
+  <input id="confirmPassword" type="password" />
+
+  <button onclick="saveNewPassword()">Salva</button>
+</section>
+
+function showChangePasswordPanel() {
+  document.getElementById('loginCard').classList.add('hidden');
+  document.getElementById('changePasswordPanel').classList.remove('hidden');
+}
+
+async function saveNewPassword() {
+  const newPass = document.getElementById('newPassword').value;
+  const confirm = document.getElementById('confirmPassword').value;
+
+  if (!newPass || newPass.length < 6) {
+    alert('Password minimo 6 caratteri');
+    return;
+  }
+
+  if (newPass !== confirm) {
+    alert('Le password non coincidono');
+    return;
+  }
+
+  // aggiorna su Firestore
+  await db.collection('users')
+    .doc(currentUser.firestoreId)
+    .update({
+      password: newPass,
+      mustChangePassword: false
+    });
+
+  alert('✅ Password aggiornata');
+
+  // login normale
+  document.getElementById('changePasswordPanel').classList.add('hidden');
+  document.getElementById('mainNav').classList.remove('hidden');
+
+  applyRoleVisibility();
+}
+
 function logout() { currentUser = null; location.reload(); }
 
 function applyRoleVisibility() {
@@ -1940,7 +1999,7 @@ async function createUser() {
   }
   const newUser = {
     id: makeId('USR'), name, surname, email, password, role,
-    barcode: 'USER|' + email
+    barcode: 'USER|' + email, mustChangePassword: true
   };
   await fsAddUser(newUser);
   ['newUserName','newUserSurname','newUserEmail','newUserPassword'].forEach(id => {

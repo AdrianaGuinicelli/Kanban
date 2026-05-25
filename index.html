@@ -143,6 +143,19 @@
     </div>
   </section>
 
+<section id="changePasswordPanel" class="card hidden">
+  <h2>Modifica password</h2>
+
+  <label>Nuova password</label>
+  <input id="newPassword" type="password" />
+
+  <label>Conferma password</label>
+  <input id="confirmPassword" type="password" />
+
+  <button onclick="saveNewPassword()">Salva</button>
+</section>
+
+
   <!-- NAV -->
   <nav id="mainNav" class="card hidden no-print">
     <button onclick="showPanel('productionPanel')">Richiesta produzione</button>
@@ -516,11 +529,24 @@ function beepError() {
 function startRealtimeListeners() {
 
   // UTENTI
-  db.collection('users').onSnapshot(snap => {
+// UTENTI
+db.collection('users').onSnapshot(
+  snap => {
     appUsers = snap.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
     renderUsersTable();
     showSync();
-  });
+
+    hideLoading(); // ✅ qui sblocchi il loader appena arrivano i dati
+  },
+  err => {
+    console.error("Errore users:", err);
+
+    alert("Errore connessione Firebase (utenti)");
+    
+    hideLoading(); // ✅ IMPORTANTISSIMO: evita che resti bloccato
+  }
+);
+
 
   // RICHIESTE
   db.collection('requests').onSnapshot(snap => {
@@ -688,17 +714,6 @@ function setLoggedUser(user) {
   applyRoleVisibility();
 }
 
-<section id="changePasswordPanel" class="card hidden">
-  <h2>Modifica password</h2>
-
-  <label>Nuova password</label>
-  <input id="newPassword" type="password" />
-
-  <label>Conferma password</label>
-  <input id="confirmPassword" type="password" />
-
-  <button onclick="saveNewPassword()">Salva</button>
-</section>
 
 function showChangePasswordPanel() {
   document.getElementById('loginCard').classList.add('hidden');
@@ -2110,9 +2125,16 @@ function renderAll() {
 // INIT - avvio app
 // ============================================================
 (async () => {
+(async () => {
   await initAdminIfNeeded();
   startRealtimeListeners();
+
+  // ✅ sicurezza anti-blocco
+  setTimeout(() => {
+    hideLoading();
+  }, 3000);
 })();
+``
 </script>
 </body>
 </html>

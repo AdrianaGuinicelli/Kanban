@@ -2120,21 +2120,24 @@ function renderAll() {
   renderMissingCodesTable();
   updateMissingCodesBtnColor();
 }
-
 // ============================================================
 // INIT - avvio app
 // ============================================================
 (async () => {
-(async () => {
-  await initAdminIfNeeded();
-  startRealtimeListeners();
+  try {
+    await initAdminIfNeeded();
+    startRealtimeListeners();
+  } catch (err) {
+    console.error("Errore init:", err);
+    alert("Errore inizializzazione app");
+  }
 
-  // ✅ sicurezza anti-blocco
+  // ✅ fallback anti-blocco
   setTimeout(() => {
     hideLoading();
   }, 3000);
+
 })();
-``
 </script>
 </body>
 </html>

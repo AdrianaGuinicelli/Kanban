@@ -10,7 +10,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <!-- jsQR per fotocamera -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin:0; font-family:Arial,sans-serif; background:#f4f6f8; color:#1f2937; }
@@ -32,7 +33,16 @@
     button.success   { background:#16a34a; }
     button.danger    { background:#dc2626; }
     button.warning   { background:#d97706; }
-    nav button { margin-top:0; }
+    nav {
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+nav button {
+  margin-top:0;
+}
     table { width:100%; border-collapse:collapse; background:white; margin-top:12px; font-size:13px; }
     th, td { border:1px solid #e5e7eb; padding:8px; text-align:left; vertical-align:top; }
     th { background:#f9fafb; }
@@ -102,6 +112,13 @@
       .print-header { margin-bottom:10px;
         border-bottom:2px solid #111827; padding-bottom:8px; }
     }
+nav button.active {
+  background: #1d4ed8;   /* più scuro */
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transform: scale(1.03);
+}
   </style>
 </head>
 <body>
@@ -117,7 +134,35 @@
 
 <header>
   <h1>Kanban Material Request</h1>
-  <div id="userInfo">Non autenticato</div>
+<div id="userInfo" style="position:relative; display:flex; align-items:center; gap:10px;">
+
+  <div onclick="toggleUserMenu()" id="userBox"
+       style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+
+    <span id="userText">Non autenticato</span>
+
+    <span style="font-size:12px;">▼</span>
+
+  </div>
+
+  <div id="userMenu"
+       style="display:none; position:absolute; top:40px; right:0;
+              background:white; border:1px solid #cbd5e1;
+              border-radius:8px; padding:6px;
+              box-shadow:0 4px 12px rgba(0,0,0,0.15);
+              z-index:100; min-width:140px;">
+
+    <button onclick="openProfile()" style="width:100%; text-align:left;">
+      👤 Profilo
+    </button>
+
+    <button onclick="logout()" style="width:100%; text-align:left;">
+      🚪 Logout
+    </button>
+
+  </div>
+
+</div>
 </header>
 
 <main>
@@ -162,11 +207,34 @@
     <button onclick="showPanel('warehousePanel')">Tabella richieste</button>
     <button onclick="showPanel('pickingPanel')">Liste picking</button>
     <button onclick="showPanel('historyPanel')">Storico</button>
-    <button onclick="showPanel('adminUsersPanel')">Gestione utenti</button>
-<button onclick="openProfile()">👤 Profilo</button>
-    <button class="secondary" onclick="logout()">Logout</button>
-    <button onclick="toggleUploadPanel()" id="uploadBtn">📦 Carica anagrafica</button>
-    <button onclick="toggleMissingCodesPanel()" id="missingCodesBtn">⚠️ Codici mancanti</button>
+<div style="position:relative;">
+  
+  <button onclick="toggleAnagraficaMenu()" id="anagraficaBtn">
+    ⚙️ Gestione anagrafica ⏷
+  </button>
+<div id="anagraficaMenu"
+     style="display:none; position:absolute; top:40px; left:0; 
+            background:white; border:1px solid #cbd5e1; 
+            border-radius:8px; padding:6px; 
+            box-shadow:0 4px 12px rgba(0,0,0,0.15); 
+            z-index:100;">
+
+<button onclick="showPanel('adminUsersPanel')"
+        style="display:block; width:100%; text-align:left; padding:8px 10px; margin-bottom:4px;">
+  👥 Gestione utenti
+</button>
+
+<button onclick="toggleUploadPanel()"
+        style="display:block; width:100%; text-align:left; padding:8px 10px; margin-bottom:4px;">
+  📦 Carica anagrafica
+</button>
+
+<button onclick="toggleMissingCodesPanel()"
+        style="display:block; width:100%; text-align:left; padding:8px 10px;">
+  ⚠️ Codici mancanti
+</button>
+  </div>
+   
   </nav>
 
   <!-- PRODUZIONE -->
@@ -264,17 +332,47 @@
     <div id="requestsTableContainer"></div>
   </section>
 
-  <!-- PICKING -->
-  <section id="pickingPanel" class="card hidden">
-    <h2>Liste di picking generate</h2>
-    <div class="toolbar no-print">
-      <input id="pickingCodeInput" placeholder="Spara codice lista picking" />
-      <button onclick="setPickingListStatusFromBarcode('Inizio stoccaggio')">Inizio stoccaggio</button>
-      <button class="success"
-              onclick="setPickingListStatusFromBarcode('Fine stoccaggio')">Fine stoccaggio</button>
-    </div>
-    <div id="pickingTableContainer"></div>
-  </section>
+<!-- PICKING -->
+<section id="pickingPanel" class="card hidden">
+  <h2>Liste di picking generate</h2>
+
+  <div class="toolbar no-print">
+<input id="pickingCodeInput" placeholder="Spara codice lista picking" />
+
+<!-- 🟠 NUOVO: Fine Picking (warning) -->
+<button class="warning"
+  onclick="setPickingListStatusFromBarcode('Fine picking')">
+  ⛔ Fine picking
+</button>
+
+<!-- 🔵 Inizio -->
+<button onclick="setPickingListStatusFromBarcode('Inizio stoccaggio')">
+  🚚 Inizio stoccaggio
+</button>
+
+<!-- 🟢 Fine Stoccaggio (success) -->
+<button class="success"
+  onclick="setPickingListStatusFromBarcode('Fine stoccaggio')">
+  ✅ Fine stoccaggio
+</button>
+
+  </div>
+
+  <div id="pickingTableContainer"></div>
+</section>
+
+<!-- ✅ DETTAGLIO PICKING (FUORI!) -->
+<section id="pickingDetailPanel" class="card hidden">
+  <h2 id="pickingDetailTitle">Dettaglio lista picking</h2>
+
+  <div style="margin-bottom:12px;">
+    <button class="secondary" onclick="backToPicking()">
+      ⬅ Torna alle liste
+    </button>
+  </div>
+
+  <div id="pickingDetailContainer"></div>
+</section>
 
   <!-- STORICO -->
   <section id="historyPanel" class="card hidden">
@@ -436,8 +534,19 @@ const db = firebase.firestore();
 let currentUser      = null;
 let sortState        = { column:'requestIso', direction:'desc' };
 let draftRows        = [];
-let columnFilters    = {};
+let columnFiltersRequests = {};
+let columnFiltersHistory = {};
+let columnFiltersPicking = {};
+let historyFilters = {};
+let openHistoryFilter = null;
 let openFilterColumn = null;
+let filterSearchText = {};
+let columnFiltersProductionHistory = {};
+
+function filterSearch(column, text) {
+  filterSearchText[column] = text.toLowerCase();
+  renderCurrentTable();
+}
 let itemMaster       = {};
 let barcodeBufferTimeout = null;
 let editingItemCode  = null;
@@ -448,6 +557,7 @@ let itemColFilters   = {};
 let cameraStream     = null;
 let cameraScanInterval = null;
 let currentHistoryTab  = 'picking';
+
 
 // dati in memoria (aggiornati dai listener Firestore)
 let appUsers             = [];
@@ -472,6 +582,18 @@ const requestColumns = [
   ['status',         'Stato riga'],
   ['pickingListCode','Lista picking']
 ];
+function deselectAllFilterValues(column) {
+  const filters = getCurrentFilters();
+
+  const allValues = getAvailableFilterValues(column);
+
+  // ✅ mette un valore impossibile → nessun match
+  filters[column] = [];
+
+  openFilterColumn = null;
+
+  renderCurrentTable();
+}
 
 // ============================================================
 // UTILITY
@@ -483,6 +605,18 @@ function nowParts() {
     date: d.toLocaleDateString('it-IT'),
     time: d.toLocaleTimeString('it-IT')
   };
+}
+function getFormattedDateTimeForFile() {
+  const d = new Date();
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+
+  return day + '-' + month + '-' + year + '_' + hours + '-' + minutes;
 }
 function makeId(prefix) {
   return prefix + '-' + Date.now().toString(36).toUpperCase()
@@ -600,17 +734,29 @@ db.collection('users').onSnapshot(
     showSync();
   });
 
-  // ANAGRAFICA
-  db.collection('itemMaster').onSnapshot(snap => {
-    itemMaster = {};
-    snap.docs.forEach(d => { itemMaster[d.id] = d.data(); });
-    const total = Object.keys(itemMaster).length;
-    const el = document.getElementById('itemMasterStatus');
-    if (el && total > 0)
-      el.innerText = '✅ Anagrafica attiva (' + total + ' articoli)';
-    renderItemMasterTable();
-    showSync();
+// ANAGRAFICA
+db.collection('itemMaster').onSnapshot(snap => {
+
+  itemMaster = {};
+
+  snap.docs.forEach(d => {
+    const code = d.id;
+    const data = d.data();
+
+    itemMaster[code] = data.variants || [];
   });
+
+  const total = Object.keys(itemMaster).length;
+
+  const el = document.getElementById('itemMasterStatus');
+
+  if (el && total > 0) {
+    el.innerText = '✅ Anagrafica attiva (' + total + ' codici)';
+  }
+
+  renderItemMasterTable();
+  showSync();
+});
 
   hideLoading();
 }
@@ -724,9 +870,9 @@ function setLoggedUser(user) {
     return;
   }
 
-  document.getElementById('userInfo').innerHTML =
-    user.name + ' ' + user.surname +
-    ' <span class="badge">' + user.role + '</span>';
+document.getElementById('userText').innerHTML =
+ user.name + ' ' + user.surname +
+ ' <span class="badge">' + user.role + '</span>';
 
   document.getElementById('loginCard').classList.add('hidden');
   document.getElementById('mainNav').classList.remove('hidden');
@@ -856,18 +1002,54 @@ function updateMissingCodesBtnColor() {
 // NAVIGAZIONE
 // ============================================================
 function showPanel(panelId) {
-  const up = document.getElementById('uploadPanel');
-  const mp = document.getElementById('missingCodesPanel');
-  if (up) up.classList.add('hidden');
-  if (mp) mp.classList.add('hidden');
-  ['productionPanel','warehousePanel','pickingPanel',
-   'historyPanel','adminUsersPanel'].forEach(id => {
-    document.getElementById(id).classList.add('hidden');
-  });
+
+  // ✅ nascondi TUTTI i pannelli
+  document.querySelectorAll(
+    'main > section, #uploadPanel, #missingCodesPanel'
+  ).forEach(el => el.classList.add('hidden'));
+
+  // ✅ mostra SOLO quello richiesto
   document.getElementById(panelId).classList.remove('hidden');
+
+  // ✅ evidenzia bottone attivo
+  document.querySelectorAll('#mainNav button').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  const map = {
+    productionPanel: document.querySelector('[onclick="showPanel(\'productionPanel\')"]'),
+    warehousePanel: document.querySelector('[onclick="showPanel(\'warehousePanel\')"]'),
+    pickingPanel: document.querySelector('[onclick="showPanel(\'pickingPanel\')"]'),
+    historyPanel: document.querySelector('[onclick="showPanel(\'historyPanel\')"]')
+  };
+
+  if (map[panelId]) {
+    map[panelId].classList.add('active');
+  }
+
   renderAll();
 }
 
+function toggleAnagraficaMenu() {
+  const menu = document.getElementById('anagraficaMenu');
+  const userMenu = document.getElementById('userMenu');
+
+  const isOpen = menu.style.display === 'block';
+
+  if (userMenu) userMenu.style.display = 'none';
+
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+document.addEventListener('click', function(event) {
+  const menu = document.getElementById('anagraficaMenu');
+  const btn = document.getElementById('anagraficaBtn');
+
+  if (!menu || !btn) return;
+
+  if (!menu.contains(event.target) && !btn.contains(event.target)) {
+    menu.style.display = 'none';
+  }
+});
 function toggleUploadPanel() {
   const upload  = document.getElementById('uploadPanel');
   const missing = document.getElementById('missingCodesPanel');
@@ -876,13 +1058,33 @@ function toggleUploadPanel() {
     showPanel('productionPanel'); return;
   }
   missing.classList.add('hidden');
-  ['productionPanel','warehousePanel','pickingPanel',
-   'historyPanel','adminUsersPanel'].forEach(id => {
+['productionPanel','warehousePanel','pickingPanel',
+ 'historyPanel','adminUsersPanel','profilePanel'].forEach(id => {
     document.getElementById(id).classList.add('hidden');
   });
   upload.classList.remove('hidden');
   renderItemMasterTable();
 }
+function toggleUserMenu() {
+  const userMenu = document.getElementById('userMenu');
+  const anagraficaMenu = document.getElementById('anagraficaMenu');
+
+  const isOpen = userMenu.style.display === 'block';
+
+  if (anagraficaMenu) anagraficaMenu.style.display = 'none';
+
+  userMenu.style.display = isOpen ? 'none' : 'block';
+}
+document.addEventListener('click', function(event) {
+  const menu = document.getElementById('userMenu');
+  const box = document.getElementById('userBox');
+
+  if (!menu || !box) return;
+
+  if (!menu.contains(event.target) && !box.contains(event.target)) {
+    menu.style.display = 'none';
+  }
+});
 
 function toggleMissingCodesPanel() {
   const upload  = document.getElementById('uploadPanel');
@@ -904,91 +1106,202 @@ function toggleMissingCodesPanel() {
 // STORICO TAB
 // ============================================================
 function showHistoryTab(tab) {
+
   currentHistoryTab = tab;
+
   const picking    = document.getElementById('historyPickingContainer');
   const production = document.getElementById('historyProductionContainer');
   const btnP       = document.getElementById('tabPickingBtn');
   const btnPr      = document.getElementById('tabProductionBtn');
+
+  // ✅ reset separati
+  columnFiltersHistory = {};
+  columnFiltersProductionHistory = {};
+  openFilterColumn = null;
+
   if (tab === 'picking') {
     picking.style.display    = 'block';
     production.style.display = 'none';
-    btnP.className  = 'success'; btnPr.className = 'secondary';
+    btnP.className  = 'success';
+    btnPr.className = 'secondary';
     renderHistoryTable();
   } else {
     picking.style.display    = 'none';
     production.style.display = 'block';
-    btnP.className  = 'secondary'; btnPr.className = 'success';
+    btnP.className  = 'secondary';
+    btnPr.className = 'success';
     renderProductionHistoryTable();
   }
 }
-
+// ✅ FILTRI STORICO
+function setHistoryFilter(column, value) {
+  if (!historyFilters[column]) historyFilters[column] = '';
+  historyFilters[column] = value.toLowerCase();
+  renderHistoryTable();
+}
 // ============================================================
 // ANAGRAFICA
 // ============================================================
-function loadItemMasterFromFile() {
+async function loadItemMasterFromFile() {
+
   if (!currentUser || currentUser.role !== 'admin') {
-    alert('Solo admin può caricare l\'anagrafica'); return;
+    alert('Solo admin può caricare l\'anagrafica');
+    return;
   }
-  const fileInput = document.getElementById('fileInputUpload');
-  const file = fileInput.files[0];
+
+  const file = document.getElementById('fileInputUpload').files[0];
   if (!file) return;
-  const lbl = document.getElementById('fileChosenLabel');
-  if (lbl) lbl.innerText = file.name;
+
   const reader = new FileReader();
+
   reader.onload = async function(e) {
+
     const text = e.target.result;
-    let addedCount = 0, updatedCount = 0;
-    const now = new Date().toLocaleString('it-IT');
     const rows = text.split('\n').slice(1);
-    const batch = db.batch();
-    rows.forEach(row => {
-      if (!row.trim()) return;
-      const cols = row.includes(';') ? row.split(';') : row.split(',');
-      if (cols.length < 6) return;
-      const code = cols[0].trim().toUpperCase();
-      if (!code) return;
-      const isNew = !itemMaster[code];
-      if (isNew) addedCount++; else updatedCount++;
-      const ref = db.collection('itemMaster').doc(code);
-      batch.set(ref, {
-        description: cols[1].trim(),
-        unit:        cols[2].trim(),
-        defaultQty:  Number(cols[3]),
-        valueStream: cols[4].trim(),
-        line:        cols[5].trim(),
-        location:    cols[6] ? cols[6].trim() : '',
-        uploadDate:  isNew ? now : (itemMaster[code]?.uploadDate || now)
-      });
+    const now = new Date().toLocaleString('it-IT');
+
+    const newData = {};
+
+    // ✅ PRENDI DATI ATTUALI
+    const snap = await db.collection('itemMaster').get();
+
+    let oldTotalRows = 0;
+
+    snap.docs.forEach(doc => {
+      const data = doc.data();
+      const variants = data.variants || [];
+      oldTotalRows += variants.length;
     });
-    await batch.commit();
-    const total = Object.keys(itemMaster).length + addedCount;
-    alert('Anagrafica aggiornata:\n- Nuovi: ' + addedCount +
-          '\n- Aggiornati: ' + updatedCount);
+
+    // ✅ PARSE CSV
+    rows.forEach(row => {
+
+      if (!row.trim()) return;
+
+      const cols = row.split(';').map(c => c.trim().replace(/^"+|"+$/g, ''));
+
+      if (cols.length < 6) return;
+
+      const code = cols[0].toUpperCase();
+
+      const item = {
+        description: cols[1],
+        unit: cols[2],
+        defaultQty: Number(cols[3]) || 0,
+        valueStream: cols[4],
+        line: cols[5],
+        location: cols[6] || '',
+        uploadDate: now
+      };
+
+      if (!newData[code]) {
+        newData[code] = [];
+      }
+
+      newData[code].push(item);
+    });
+
+    // ✅ CONTA NUOVE RIGHE TOTALI
+    let newTotalRows = 0;
+    Object.values(newData).forEach(arr => newTotalRows += arr.length);
+
+    // ✅ CALCOLI KPI
+    let newRows = 0;
+    let updatedRows = 0;
+
+    snap.docs.forEach(doc => {
+
+      const code = doc.id;
+      const oldVariants = doc.data().variants || [];
+      const newVariants = newData[code] || [];
+
+      oldVariants.forEach(oldV => {
+
+        const match = newVariants.find(n =>
+          n.valueStream === oldV.valueStream &&
+          n.line === oldV.line
+        );
+
+        if (match) updatedRows++;
+
+      });
+
+    });
+
+    newRows = newTotalRows - updatedRows;
+    const removedRows = oldTotalRows - updatedRows;
+
+    // ✅ SALVATAGGIO
+    for (const [code, variants] of Object.entries(newData)) {
+
+      await db.collection('itemMaster').doc(code).set({
+        variants: variants
+      });
+
+    }
+
+    // ✅ OUTPUT DETTAGLIO COMPLETO
+    alert(
+      "✅ Anagrafica aggiornata\n\n" +
+      "📦 Righe prima: " + oldTotalRows + "\n" +
+      "📦 Righe dopo: " + newTotalRows + "\n\n" +
+      "🟢 Nuove: " + newRows + "\n" +
+      "🟠 Aggiornate: " + updatedRows + "\n" +
+      "🔴 Eliminate: " + removedRows
+    );
+
   };
+
   reader.readAsText(file);
 }
-
 function downloadItemMasterTemplate() {
+
   let rows = [];
+
   if (Object.keys(itemMaster).length) {
-    rows = Object.entries(itemMaster).map(([code, item]) => ({
-      Codice: code, Descrizione: item.description, UM: item.unit,
-      Quantita_Default: item.defaultQty, Value_Stream: item.valueStream,
-      Linea: item.line, Ubicazione: item.location || '',
-// NUOVA COLONNA
-CodiceCompleto: [
-  code,
-  item.description,
-  item.unit,
-  item.defaultQty,
-  item.valueStream,
-  item.line
-].map(v => (v || "").toString().trim()).join("|")
-    }));
+
+    Object.entries(itemMaster).forEach(([code, variants]) => {
+
+      variants.forEach(item => {
+
+        rows.push({
+          Codice: code,
+          Descrizione: item.description || '',
+          UM: item.unit || '',
+          Quantita_Default: item.defaultQty || '',
+          Value_Stream: item.valueStream || '',
+          Linea: item.line || '',
+          Ubicazione: item.location || '',
+
+          // ✅ campo utile se vuoi debug/barcode
+          CodiceCompleto: [
+            code,
+            item.description,
+            item.unit,
+            item.defaultQty,
+            item.valueStream,
+            item.line
+          ].map(v => (v || "").toString().trim()).join("|")
+
+        });
+
+      });
+
+    });
+
   } else {
-    rows = [{ Codice:'', Descrizione:'', UM:'',
-              Quantita_Default:'', Value_Stream:'', Linea:'', Ubicazione:'' }];
+
+    rows = [{
+      Codice:'',
+      Descrizione:'',
+      UM:'',
+      Quantita_Default:'',
+      Value_Stream:'',
+      Linea:'',
+      Ubicazione:''
+    }];
   }
+
   downloadCsv('anagrafica.csv', rows);
 }
 
@@ -1042,109 +1355,89 @@ async function addItemManually() {
 }
 
 function renderItemMasterTable() {
+
   const container = document.getElementById('itemMasterTableContainer');
   const countEl   = document.getElementById('itemMasterCount');
+
   if (!container) return;
+
   const allItems = Object.entries(itemMaster);
+
   if (!allItems.length) {
     container.innerHTML = '<p class="muted">Nessun articolo caricato.</p>';
-    if (countEl) countEl.innerText = ''; return;
+    if (countEl) countEl.innerText = '';
+    return;
   }
-  const searchInput = document.getElementById('itemMasterSearch');
-  const searchText  = searchInput ? searchInput.value.trim().toLowerCase() : '';
-  const fCode = (itemColFilters['code']        || '').toLowerCase();
-  const fDesc = (itemColFilters['description'] || '').toLowerCase();
-  const fUnit = (itemColFilters['unit']        || '').toLowerCase();
-  const fVS   = (itemColFilters['valueStream'] || '').toLowerCase();
-  const fLine = (itemColFilters['line']        || '').toLowerCase();
-  const fLoc  = (itemColFilters['location']    || '').toLowerCase();
-  const fDate = (itemColFilters['uploadDate']  || '').toLowerCase();
-  const filtered = allItems.filter(([code, item]) => {
-    if (searchText) {
-      const m = code.toLowerCase().includes(searchText) ||
-        (item.description||'').toLowerCase().includes(searchText) ||
-        (item.unit||'').toLowerCase().includes(searchText) ||
-        (item.valueStream||'').toLowerCase().includes(searchText) ||
-        (item.line||'').toLowerCase().includes(searchText) ||
-        (item.location||'').toLowerCase().includes(searchText);
-      if (!m) return false;
-    }
-    if (fCode && !code.toLowerCase().includes(fCode)) return false;
-    if (fDesc && !(item.description||'').toLowerCase().includes(fDesc)) return false;
-    if (fUnit && !(item.unit||'').toLowerCase().includes(fUnit)) return false;
-    if (fVS   && !(item.valueStream||'').toLowerCase().includes(fVS))  return false;
-    if (fLine && !(item.line||'').toLowerCase().includes(fLine)) return false;
-    if (fLoc  && !(item.location||'').toLowerCase().includes(fLoc))  return false;
-    if (fDate && !(item.uploadDate||'').toLowerCase().includes(fDate)) return false;
-    return true;
+
+  let totalRows = 0;
+
+  let html = '<table><thead><tr>' +
+    '<th>Codice</th>' +
+    '<th>Descrizione</th>' +
+    '<th>UM</th>' +
+    '<th>Qta Default</th>' +
+    '<th>Value Stream</th>' +
+    '<th>Linea</th>' +
+    '<th>Ubicazione</th>' +
+    '<th>Data caricamento</th>' +
+    '<th>Azioni</th>' +
+    '</tr></thead><tbody>';
+
+  allItems.forEach(([code, variants]) => {
+
+    variants.forEach((item, index) => {
+
+      totalRows++;
+
+      html += '<tr>' +
+
+        '<td><strong>' + code + '</strong></td>' +
+
+        '<td>' + escapeHtml(item.description || '') + '</td>' +
+
+        '<td>' + escapeHtml(item.unit || '') + '</td>' +
+
+        '<td>' + (item.defaultQty || 0) + '</td>' +
+
+        '<td>' + escapeHtml(item.valueStream || '') + '</td>' +
+
+        '<td>' + escapeHtml(item.line || '') + '</td>' +
+
+        '<td>' + escapeHtml(item.location || '') + '</td>' +
+
+        '<td>' + (item.uploadDate || '') + '</td>' +
+
+        '<td>' +
+          '<button class="danger" onclick="deleteVariant(\'' + code + '\',' + index + ')">🗑</button>' +
+        '</td>' +
+
+      '</tr>';
+
+    });
+
   });
-  if (countEl) countEl.innerText =
-    'Articoli visibili: ' + filtered.length + ' di ' + allItems.length;
-  if (!filtered.length) {
-    container.innerHTML = '<p class="muted">Nessun articolo trovato.</p>'; return;
-  }
-  const fi = (col, ph) =>
-    '<th><input type="text" placeholder="🔍 ' + ph + '"'
-    + ' value="' + escapeHtml(itemColFilters[col]||'') + '"'
-    + ' oninput="setItemColFilter(\'' + col + '\',this.value)"'
-    + ' style="width:100%;padding:4px;font-size:11px;margin:0;"></th>';
-  let html = '<table><thead>'
-    + '<tr><th>Codice</th><th>Descrizione</th><th>UM</th><th>Qta Default</th>'
-    + '<th>Value Stream</th><th>Linea</th><th>Ubicazione</th>'
-    + '<th>Data caricamento</th><th>Ora caricamento</th>'
-    + '<th class="no-print">Azioni</th></tr>'
-    + '<tr>' + fi('code','Codice') + fi('description','Descrizione') + fi('unit','UM')
-    + '<th></th>' + fi('valueStream','Value Stream') + fi('line','Linea')
-    + fi('location','Ubicazione') + fi('uploadDate','Data') + '<th></th>'
-    + '<th class="no-print"><button onclick="clearItemColFilters()" '
-    + 'style="padding:4px 8px;font-size:11px;margin:0;background:#dc2626;">'
-    + '✖ Pulisci</button></th>'
-    + '</tr></thead><tbody>';
-  filtered.forEach(([code, item]) => {
-    const isEditing = (editingItemCode === code);
-    if (isEditing) {
-      html += '<tr class="row-editing"><td><strong>' + code + '</strong></td>'
-        + '<td><input class="edit-input" id="edit_description" value="'
-        + escapeHtml(item.description||'') + '"></td>'
-        + '<td><input class="edit-input" id="edit_unit" value="'
-        + escapeHtml(item.unit||'') + '" style="width:60px"></td>'
-        + '<td><input class="edit-input" id="edit_defaultQty" type="number" value="'
-        + (item.defaultQty||0) + '" style="width:70px"></td>'
-        + '<td><input class="edit-input" id="edit_valueStream" value="'
-        + escapeHtml(item.valueStream||'') + '"></td>'
-        + '<td><input class="edit-input" id="edit_line" value="'
-        + escapeHtml(item.line||'') + '"></td>'
-        + '<td><input class="edit-input" id="edit_location" value="'
-        + escapeHtml(item.location||'') + '"></td>'
-        + '<td colspan="2"><span class="muted">'
-        + (item.uploadDate||'N/D') + '</span></td>'
-        + '<td class="no-print"><div class="item-table-actions">'
-        + '<button class="success" onclick="saveItemEdit(\'' + code + '\')">💾 Salva</button>'
-        + '<button class="secondary" onclick="cancelItemEdit()">✖ Annulla</button>'
-        + '</div></td></tr>';
-    } else {
-      let datePart = 'N/D', timePart = '';
-      if (item.uploadDate) {
-        const p = item.uploadDate.split(', ');
-        if (p.length === 2) { datePart = p[0]; timePart = p[1]; }
-        else datePart = item.uploadDate;
-      }
-      html += '<tr><td><strong>' + code + '</strong></td>'
-        + '<td>' + escapeHtml(item.description||'') + '</td>'
-        + '<td>' + escapeHtml(item.unit||'') + '</td>'
-        + '<td>' + (item.defaultQty||0) + '</td>'
-        + '<td>' + escapeHtml(item.valueStream||'') + '</td>'
-        + '<td>' + escapeHtml(item.line||'') + '</td>'
-        + '<td>' + escapeHtml(item.location||'') + '</td>'
-        + '<td>' + datePart + '</td><td>' + timePart + '</td>'
-        + '<td class="no-print"><div class="item-table-actions">'
-        + '<button class="warning" onclick="startItemEdit(\'' + code + '\')">✏️ Modifica</button>'
-        + '<button class="danger" onclick="deleteItem(\'' + code + '\')">🗑 Elimina</button>'
-        + '</div></td></tr>';
-    }
-  });
+
   html += '</tbody></table>';
+
   container.innerHTML = html;
+
+  if (countEl) {
+    countEl.innerText = 'Articoli visibili: ' + totalRows;
+  }
+}
+
+async function deleteVariant(code, index) {
+
+  const variants = itemMaster[code];
+
+  if (!variants) return;
+
+  variants.splice(index, 1);
+
+  await db.collection('itemMaster').doc(code).set({
+    variants: variants
+  });
+
 }
 
 function setItemColFilter(column, value) {
@@ -1259,13 +1552,22 @@ async function markCodeAsInserted(firestoreId) {
 // BARCODE / DRAFT
 // ============================================================
 function handleBarcodeInput() {
-  const value = document.getElementById('barcodeInput').value.trim();
-  if (value.length > 0) {
-    clearTimeout(barcodeBufferTimeout);
-    barcodeBufferTimeout = setTimeout(() => {
-      if (value.includes('|')) addBarcodeDirectly();
-    }, 300);
+
+  const input = document.getElementById('barcodeInput');
+  const value = input.value.trim();
+
+  // ✅ SE SVUOTI → cancella UI varianti
+  if (value === '') {
+    document.getElementById('draftRowsContainer').innerHTML = '';
+    return;
   }
+
+  // comportamento originale
+  clearTimeout(barcodeBufferTimeout);
+
+  barcodeBufferTimeout = setTimeout(() => {
+    if (value.includes('|')) addBarcodeDirectly();
+  }, 300);
 }
 
 function parseBarcode(raw) {
@@ -1282,20 +1584,105 @@ function parseBarcode(raw) {
     return {
       itemCode: code, description: parts[1].trim(), quantity: qty,
       unit: parts[2].trim(), valueStream: parts[4].trim(), line: parts[5].trim(),
-      location: itemMaster[code] ? (itemMaster[code].location || '') : '',
+      location: (itemMaster[code] && itemMaster[code][0])
+  ? (itemMaster[code][0].location || '')
+  : '',
       fromManual: false
     };
   }
-  const code = trimmed.toUpperCase();
-  const item = itemMaster[code];
-  if (!item) throw new Error('Codice "' + code + '" non trovato in anagrafica.');
+const code = trimmed.toUpperCase();
+const items = itemMaster[code];
+
+if (!items || items.length === 0) {
+  throw new Error('Codice "' + code + '" non trovato in anagrafica.');
+}
+
+// ✅ CASO 1: UNA SOLA VARIANTE
+if (items.length === 1) {
+
+  const item = items[0];
+
   return {
-    itemCode: code, description: item.description, quantity: item.defaultQty,
-    unit: item.unit, valueStream: item.valueStream, line: item.line,
-    location: item.location || '', fromManual: false
+    itemCode: code,
+    description: item.description,
+    quantity: item.defaultQty,
+    unit: item.unit,
+    valueStream: item.valueStream,
+    line: item.line,
+    location: item.location || '',
+    fromManual: false
   };
 }
 
+// ✅ CASO 2: PIÙ VARIANTI → selezione
+showVariantSelection(code, items);
+
+throw new Error("__SELECTION__");
+}
+function selectVariant(code, valueStream, line) {
+
+  const variants = itemMaster[code];
+
+  const selected = variants.find(v =>
+    v.valueStream === valueStream &&
+    v.line === line
+  );
+
+  if (!selected) return;
+
+  const parsed = {
+    itemCode: code,
+    description: selected.description,
+    quantity: selected.defaultQty,
+    unit: selected.unit,
+    valueStream: selected.valueStream,
+    line: selected.line,
+
+    // ✅ FIX CRITICO
+    location: selected.location || '',
+
+    fromManual: false
+  };
+
+  addSelectedVariant(parsed);
+}
+async function addSelectedVariant(parsed) {
+
+  const priority = document.getElementById('priorityInput').value;
+
+  // ✅ PASSA LOCATION CORRETTA
+  await mergeOrAddDraftRow(parsed, priority, parsed.itemCode);
+
+  document.getElementById('draftRowsContainer').innerHTML = '';
+
+  renderDraftRows();
+}
+
+function showVariantSelection(code, variants) {
+
+  let html = '<h3>Seleziona variante per codice: ' + code + '</h3><br>';
+
+  variants.forEach(v => {
+
+    html += `
+      <div style="margin-bottom:8px;">
+        <button onclick="selectVariant('${code}', '${v.valueStream}', '${v.line}')">
+          ${v.valueStream} - ${v.line} (Qta: ${v.defaultQty})
+        </button>
+      </div>
+    `;
+  });
+
+  html += `
+    <div style="margin-top:10px;">
+      <button onclick="openManualForm()" style="background:#d97706;">
+        ✏️ Nessuna corrisponde (inserimento manuale)
+      </button>
+    </div>
+  `;
+
+  document.getElementById('draftRowsContainer').innerHTML = html;
+}
 async function mergeOrAddDraftRow(parsed, priority, rawBarcode) {
   const existing = draftRows.find(r =>
     r.itemCode === parsed.itemCode &&
@@ -1328,7 +1715,15 @@ async function addBarcodeDirectly() {
   const priority = document.getElementById('priorityInput').value;
   if (!raw) return;
   try {
-    const parsed = parseBarcode(raw);
+ let parsed;
+
+try {
+  parsed = parseBarcode(raw);
+} catch (err) {
+  if (err.message === "__SELECTION__") return;
+  throw err;
+}
+``
 // ✅ CONTROLLO SE CODICE È IN ANAGRAFICA
 const isInAnag = itemMaster[parsed.itemCode] !== undefined;
 
@@ -1371,7 +1766,9 @@ async function addManualRow() {
   const parsed = {
     itemCode: code, description, quantity: qty, unit,
     valueStream: vs, line,
-    location: itemMaster[code] ? (itemMaster[code].location || '') : '',
+    location: (itemMaster[code] && itemMaster[code][0])
+  ? (itemMaster[code][0].location || '')
+  : '',
     fromManual: !isInAnag
   };
   try {
@@ -1579,7 +1976,7 @@ function downloadDraftExcel() {
   let counters = JSON.parse(localStorage.getItem(storageKey) || '{}');
   counters[dateKey] = (counters[dateKey] || 0) + 1;
   localStorage.setItem(storageKey, JSON.stringify(counters));
-  const fileName = dateKey + '_' + counters[dateKey] + '.csv';
+  const fileName = getFormattedDateTimeForFile() + '.csv';
   downloadCsv(fileName, draftRows.map(r => ({
     Codice: r.itemCode, Descrizione: r.description,
     Quantita: r.quantity, UM: r.unit,
@@ -1600,6 +1997,26 @@ function priorityBadge(p) {
 function normalizeFilterValue(v) {
   const t = String(v??'').trim(); return t==='' ? '__EMPTY__' : t;
 }
+function getCurrentFilters() {
+
+  const historyVisible = !document.getElementById('historyPanel')?.classList.contains('hidden');
+  const pickingVisible = !document.getElementById('pickingPanel')?.classList.contains('hidden');
+
+  if (historyVisible) {
+
+    // ✅ qui distingui picking vs produzione
+    if (currentHistoryTab === 'production') {
+      return columnFiltersProductionHistory;
+    }
+
+    return columnFiltersHistory;
+  }
+
+  if (pickingVisible) return columnFiltersPicking;
+
+  return columnFiltersRequests;
+}
+
 function displayFilterValue(v) { return v==='__EMPTY__' ? '(Vuoto)' : v; }
 function safeJson(v) {
   return JSON.stringify(v).replaceAll('<','\u003C').replaceAll('>','\u003E');
@@ -1607,105 +2024,208 @@ function safeJson(v) {
 function getCellValue(row, col) { return String(row[col] ?? ''); }
 
 function getAvailableFilterValues(column) {
-  const viewMode = document.getElementById('viewMode')?.value || 'detail';
-  let rows = appRequests.filter(r =>
-  r.status !== 'Fine picking' && r.status !== 'In fase di Picking'
-);
-  if (viewMode === 'grouped') {
-    const map = new Map();
-    rows.filter(r => !r.pickingListCode).forEach(r => {
-      const key = r.itemCode+'|'+r.valueStream+'|'+r.line+'|'+r.unit;
-      if (!map.has(key)) map.set(key, { ...r, id:key, quantity:0, groupedIds:[] });
-      const t = map.get(key);
-      t.quantity += Number(r.quantity); t.groupedIds.push(r.id);
-    });
-    rows = Array.from(map.values());
+
+  const filters = getCurrentFilters();
+
+  const historyVisible = !document.getElementById('historyPanel')?.classList.contains('hidden');
+  const pickingVisible = !document.getElementById('pickingPanel')?.classList.contains('hidden');
+
+  let rows;
+
+  if (historyVisible) {
+    rows = currentHistoryTab === 'production'
+      ? appProductionHistory
+      : appHistory;
+  } else if (pickingVisible) {
+    rows = appPickingLists;
+  } else {
+    rows = appRequests.filter(r =>
+      r.status !== 'Fine picking' &&
+      r.status !== 'In fase di Picking'
+    );
   }
-  Object.entries(columnFilters).forEach(([fc, sv]) => {
+
+  // ✅ applica gli altri filtri
+  Object.entries(filters).forEach(([fc, sv]) => {
     if (fc === column || !sv || !sv.length) return;
-    rows = rows.filter(r => sv.includes(normalizeFilterValue(getCellValue(r, fc))));
+
+    rows = rows.filter(r =>
+      sv.includes(normalizeFilterValue(getCellValue(r, fc)))
+    );
   });
-  return Array.from(new Set(rows.map(r =>
-    normalizeFilterValue(getCellValue(r, column))
-  ))).sort((a,b) => displayFilterValue(a).localeCompare(displayFilterValue(b),'it'));
+
+  // ✅ valori unici REALI
+  const values = Array.from(new Set(
+    rows.map(r => normalizeFilterValue(getCellValue(r, column)))
+  ));
+
+  // ✅ 🔥 PULIZIA AUTOMATICA FILTRO
+  if (filters[column]) {
+    filters[column] = filters[column].filter(v => values.includes(v));
+
+    if (filters[column].length === 0) {
+      delete filters[column];
+    }
+  }
+
+  return values;
 }
+
 
 function toggleFilterMenu(column) {
   openFilterColumn = openFilterColumn === column ? null : column;
-  renderRequestsTable();
+  renderCurrentTable();
 }
 function setExcelFilterValue(column, value, checked) {
+  const filters = getCurrentFilters();
+
   const allValues = getAvailableFilterValues(column);
-  if (!columnFilters[column]) columnFilters[column] = [...allValues];
-  if (checked && !columnFilters[column].includes(value)) columnFilters[column].push(value);
-  if (!checked) columnFilters[column] = columnFilters[column].filter(v => v !== value);
-  const sel = columnFilters[column];
-  const allSel = allValues.length === sel.length && allValues.every(v => sel.includes(v));
-  if (sel.length === 0) columnFilters[column] = [];
-  else if (allSel) delete columnFilters[column];
-  renderRequestsTable();
+
+  if (!filters[column]) filters[column] = [...allValues];
+
+  if (checked && !filters[column].includes(value)) {
+    filters[column].push(value);
+  }
+
+  if (!checked) {
+    filters[column] = filters[column].filter(v => v !== value);
+  }
+
+  if (filters[column].length === 0) {
+    delete filters[column];
+  }
+
+  // ✅ CRUCIALE: evita perdita click
+  setTimeout(() => {
+    renderCurrentTable();
+  }, 0);
 }
 function selectAllFilterValues(column) {
-  columnFilters[column] = getAvailableFilterValues(column); renderRequestsTable();
+  const filters = getCurrentFilters();
+  filters[column] = getAvailableFilterValues(column);
+  renderCurrentTable();
 }
-function clearSingleColumnFilter(column) { delete columnFilters[column]; renderRequestsTable(); }
-function clearColumnFilters() { columnFilters = {}; openFilterColumn = null; renderRequestsTable(); }
 
+function clearSingleColumnFilter(column) {
+  const filters = getCurrentFilters();
+  delete filters[column];
+  renderCurrentTable();
+}
+
+function clearColumnFilters() {
+  const filters = getCurrentFilters();
+  Object.keys(filters).forEach(k => delete filters[k]);
+  openFilterColumn = null;
+  renderCurrentTable();
+}
 function renderExcelFilter(column) {
-  const values   = getAvailableFilterValues(column);
-  const selected = columnFilters[column] || [];
-  const label    = selected.length > 0 ? 'Filtro attivo (' + selected.length + ')' : 'Tutti';
+
+  const values = getAvailableFilterValues(column);
+  const filters = getCurrentFilters();
+  const selected = filters[column] || [];
+
+  const label = selected.length > 0
+    ? 'Filtro attivo (' + selected.length + ')'
+    : 'Tutti';
+
   let html = '<div class="excel-filter no-print">'
-    + '<button class="filter-button" onclick="event.stopPropagation();'
-    + 'toggleFilterMenu(\'' + column + '\')">▼ ' + label + '</button>';
+    + '<button class="filter-button" onclick="event.stopPropagation();toggleFilterMenu(\'' + column + '\')">'
+    + '▼ ' + label + '</button>';
+
   if (openFilterColumn === column) {
-    html += '<div class="filter-menu" onclick="event.stopPropagation()">'
-      + '<div class="filter-actions">'
-      + '<button onclick="selectAllFilterValues(\'' + column + '\')">Seleziona tutto</button>'
-      + '<button class="secondary" onclick="clearSingleColumnFilter(\''
-      + column + '\')">Pulisci</button></div>';
-    values.forEach(value => {
-      const chk = selected.length === 0 || selected.includes(value);
-      html += '<label><input type="checkbox" ' + (chk?'checked':'')
-        + ' onchange=\'setExcelFilterValue(' + safeJson(column) + ','
-        + safeJson(value) + ',this.checked)\'> ' + displayFilterValue(value) + '</label>';
-    });
+
+    html += '<div class="filter-menu" onclick="event.stopPropagation()">';
+
+    html += '<input type="text" placeholder="Cerca..." '
+          + 'oninput="filterSearch(\'' + column + '\', this.value)" '
+          + 'style="width:100%;margin-bottom:8px;">';
+
+    // ✅ BLOCCO AZIONI CORRETTO
+    html += '<div class="filter-actions">'
+      + '<button onclick="selectAllFilterValues(\'' + column + '\')">✔</button>'
+      + '<button class="secondary" onclick="deselectAllFilterValues(\'' + column + '\')">✖</button>'
+      + '<button class="secondary" onclick="clearSingleColumnFilter(\'' + column + '\')">↺</button>'
+      + '</div>';
+
+    values
+      .filter(v => {
+        const txt = filterSearchText[column] || '';
+        return displayFilterValue(v).toLowerCase().includes(txt);
+      })
+      .forEach(value => {
+
+        const chk = selected.length === 0 || selected.includes(value);
+
+        html += '<label><input type="checkbox" '
+          + (chk ? 'checked' : '')
+          + ' onchange=\'setExcelFilterValue(' + safeJson(column) + ',' + safeJson(value) + ',this.checked)\'> '
+          + displayFilterValue(value)
+          + '</label>';
+
+      });
+
     html += '</div>';
   }
+
   html += '</div>';
   return html;
 }
-
 function getVisibleRequests() {
   const viewMode = document.getElementById('viewMode')?.value || 'detail';
+
   let rows = appRequests.filter(r =>
-  r.status !== 'Fine picking' && r.status !== 'In fase di Picking'
-);
+    r.status !== 'Fine picking' && r.status !== 'In fase di Picking'
+  );
+
   if (viewMode === 'grouped') {
     const map = new Map();
+
     rows.filter(r => !r.pickingListCode).forEach(r => {
       const key = r.itemCode+'|'+r.valueStream+'|'+r.line+'|'+r.unit;
-      if (!map.has(key)) map.set(key, { ...r, id:key, quantity:0, groupedIds:[] });
-      const t = map.get(key); t.quantity += Number(r.quantity); t.groupedIds.push(r.id);
+
+      if (!map.has(key)) {
+        map.set(key, { ...r, id:key, quantity:0, groupedIds:[] });
+      }
+
+      const t = map.get(key);
+      t.quantity += Number(r.quantity);
+      t.groupedIds.push(r.id);
     });
+
     rows = Array.from(map.values());
   }
-  Object.entries(columnFilters).forEach(([col, sv]) => {
-    if (!sv || !sv.length) return;
-    rows = rows.filter(r => sv.includes(normalizeFilterValue(getCellValue(r, col))));
+
+  // ✅ FILTRI
+  const filters = getCurrentFilters();
+
+  Object.entries(filters).forEach(([col, values]) => {
+    if (!values || values.length === 0) return;
+
+
+    rows = rows.filter(r =>
+      values.includes(normalizeFilterValue(String(r[col] || '')))
+    );
   });
+
   const pOrder = { 'Fermo linea':1, 'Urgente':2, 'Normale':3 };
+
   rows.sort((a,b) => {
-    const pa = pOrder[a.priority||'Normale']; const pb = pOrder[b.priority||'Normale'];
+    const pa = pOrder[a.priority || 'Normale'];
+    const pb = pOrder[b.priority || 'Normale'];
+
     if (pa !== pb) return pa - pb;
-    const av = a[sortState.column] || ''; const bv = b[sortState.column] || '';
-    if (av < bv) return sortState.direction==='asc' ? -1 : 1;
-    if (av > bv) return sortState.direction==='asc' ?  1 : -1;
+
+    const av = a[sortState.column] || '';
+    const bv = b[sortState.column] || '';
+
+    if (av < bv) return sortState.direction === 'asc' ? -1 : 1;
+    if (av > bv) return sortState.direction === 'asc' ? 1 : -1;
+
     return 0;
   });
+
   return rows;
 }
-
 function sortBy(column) {
   sortState = sortState.column === column
     ? { column, direction: sortState.direction==='asc' ? 'desc' : 'asc' }
@@ -1713,6 +2233,30 @@ function sortBy(column) {
   renderRequestsTable();
 }
 
+function renderCurrentTable() {
+
+  const historyVisible = !document.getElementById('historyPanel')?.classList.contains('hidden');
+  const pickingVisible = !document.getElementById('pickingPanel')?.classList.contains('hidden');
+
+  if (historyVisible) {
+
+    // ✅ QUESTA È LA CHIAVE
+    if (currentHistoryTab === 'production') {
+      renderProductionHistoryTable();
+    } else {
+      renderHistoryTable();
+    }
+
+    return;
+  }
+
+  if (pickingVisible) {
+    renderPickingTable();
+    return;
+  }
+
+  renderRequestsTable();
+}
 function renderRequestsTable() {
   const container = document.getElementById('requestsTableContainer');
   if (!container) return;
@@ -1785,8 +2329,12 @@ function printByValueStream() {
   const printDateTime = now.toLocaleDateString('it-IT') + ' ore '
                       + now.toLocaleTimeString('it-IT');
   const n             = nowParts();
-  const pickingCode   = makeId('PICK');
+  
+const pickingMap = {}; // VS → pickingCode
 
+vsOrder.forEach(vs => {
+  pickingMap[vs] = makeId('PICK');
+});
   let printContent = '';
   vsOrder.forEach(vs => {
     const rows      = vsMap.get(vs);
@@ -1797,8 +2345,18 @@ function printByValueStream() {
       '<div class="print-header" style="margin-bottom:10px;border-bottom:2px solid #111827;padding-bottom:8px;">' +
       '<table style="width:100%;border-collapse:collapse;">' +
       '<tr>' +
-      '<td style="padding:4px;font-size:18px;font-weight:bold;border:none;">' +
-        'Lista Picking: ' + escapeHtml(pickingCode) + '</td>' +
+'<td style="padding:4px;font-size:18px;font-weight:bold;border:none;">' +
+'Lista Picking: ' + escapeHtml(pickingMap[vs]) + '<br>' +
+
+'<div style="display:flex; align-items:center; gap:20px; margin-top:8px;">' +
+
+  '<div id="qrcode_' + pickingMap[vs] + '"></div>' +
+
+  '<svg id="barcode_' + pickingMap[vs] + '"></svg>' +
+
+'</div>' +
+'</td>' + 
+
       '<td style="padding:4px;text-align:right;font-size:12px;border:none;">' +
         'Stampato il: ' + printDateTime + '</td>' +
       '</tr><tr>' +
@@ -1838,83 +2396,172 @@ function printByValueStream() {
     });
     printContent += '</tbody></table></div>';
   });
+const printArea = document.getElementById('printArea');
+printArea.innerHTML = printContent;
+// ✅ GENERAZIONE QR + BARCODE
+setTimeout(() => {
 
-  const printArea = document.getElementById('printArea');
-  printArea.innerHTML = printContent;
+  vsOrder.forEach(vs => {
 
-  setTimeout(() => {
-    window.print();
-    setTimeout(async () => {
-      const doMove = confirm(
-        'Stampa completata!\nVuoi spostare le righe in "In fase di Picking"?\n' +
-        'Lista picking: ' + pickingCode
-      );
-      printArea.innerHTML = '';
-      if (!doMove) return;
+    const code = pickingMap[vs];
 
-      const toMove = selected.filter(r => !r.pickingListCode);
-      if (!toMove.length) { alert('Righe già in lista picking.'); return; }
+    try {
 
-      const batch = db.batch();
-      toMove.forEach(r => {
-        batch.update(db.collection('requests').doc(r.firestoreId), {
-          status: 'In fase di Picking',
-          pickingListCode: pickingCode,
-          selected: false,
-          inPickingDate: n.date,
-          inPickingTime: n.time,
-          inPickingIso:  n.iso
+      const qrElement = document.getElementById("qrcode_" + code);
+      if (qrElement) {
+        new QRCode(qrElement, {
+          text: code,
+          width: 70,
+          height: 70
         });
-      });
-      await batch.commit();
+      }
 
-      await fsAddPickingList({
-        code: pickingCode, status: 'In picking',
-        createdDate: n.date, createdTime: n.time, createdIso: n.iso,
-        startStorageDate:'', startStorageTime:'',
-        endStorageDate:'',   endStorageTime:''
+      JsBarcode("#barcode_" + code, code, {
+        format: "CODE128",
+        width: 1,
+        height: 30,
+        displayValue: false
       });
 
-      alert('✅ Lista picking creata: ' + pickingCode);
-      showPanel('pickingPanel');
-    }, 500);
-  }, 100);
+    } catch(e) {
+      console.error("Errore QR/Barcode:", e);
+    }
+
+  });
+
+}, 100);
+setTimeout(() => {
+  window.print();
+
+  setTimeout(async () => {
+
+    const doMove = confirm(
+      'Stampa completata!\nVuoi creare le liste picking?'
+    );
+
+    printArea.innerHTML = '';
+
+    if (!doMove) return;
+
+         for (const vs of vsOrder) {
+
+  const pickingCode = pickingMap[vs];
+  const rows = selected.filter(r => r.valueStream === vs);
+
+  if (!rows.length) continue;
+
+  const batch = db.batch();
+
+  rows.forEach(r => {
+    batch.update(db.collection('requests').doc(r.firestoreId), {
+      status: 'In fase di Picking',
+      pickingListCode: pickingCode,
+      selected: false,
+      inPickingDate: n.date,
+      inPickingTime: n.time,
+      inPickingIso: n.iso
+    });
+  });
+
+  await batch.commit();
+
+  await fsAddPickingList({
+    code: pickingCode,
+    status: 'In picking',
+    createdDate: n.date,
+    createdTime: n.time,
+    createdIso: n.iso,
+    startStorageDate:'',
+    startStorageTime:'',
+    endStorageDate:'',
+    endStorageTime:''
+  });
 }
 
+    alert('✅ Liste picking create correttamente');
+    showPanel('pickingPanel');
+
+  }, 300);
+
+}, 200);
+}
 // ============================================================
 // PICKING
 // ============================================================
 function renderPickingTable() {
   const container = document.getElementById('pickingTableContainer');
   if (!container) return;
+
   if (!appPickingLists.length) {
-    container.innerHTML = '<p class="muted">Nessuna lista picking.</p>'; return;
+    container.innerHTML = '<p class="muted">Nessuna lista picking.</p>';
+    return;
   }
+
+let rows = appPickingLists.filter(r =>
+  r.status !== 'Fine picking'
+);
+
+  const filters = columnFiltersPicking;
+
+  Object.entries(filters).forEach(([col, values]) => {
+ if (!values || values.length === 0) return;
+    rows = rows.filter(r =>
+      values.includes(normalizeFilterValue(String(r[col] || '')))
+    );
+  });
+
+  rows.sort((a, b) =>
+    (b.createdIso || '').localeCompare(a.createdIso || '')
+  );
+
   let html = '<table><thead><tr>'
-    + '<th>Codice lista</th><th>Barcode</th>'
-    + '<th>Data creazione</th><th>Ora creazione</th>'
-    + '<th>Stato</th><th>Righe</th><th class="no-print">Azioni</th>'
+    + '<th>Codice lista ' + renderExcelFilter('code') + '</th>'
+    + '<th>Barcode</th>'
+    + '<th>Data creazione ' + renderExcelFilter('createdDate') + '</th>'
+    + '<th>Ora creazione ' + renderExcelFilter('createdTime') + '</th>'
+    + '<th>Stato ' + renderExcelFilter('status') + '</th>'
+    + '<th>Righe</th>'
+    + '<th class="no-print">Azioni</th>'
     + '</tr></thead><tbody>';
-  appPickingLists.forEach(list => {
+
+  rows.forEach(list => {
     const lines = appRequests.filter(r => r.pickingListCode === list.code);
+
     html += '<tr>'
-      + '<td>' + list.code + '</td>'
+      + '<td>'
+      + '<span class="picking-link" data-code="' + list.code + '">'
+      + list.code
+      + '</span>'
+      + '</td>'
       + '<td><strong>*' + list.code + '*</strong></td>'
       + '<td>' + list.createdDate + '</td>'
       + '<td>' + list.createdTime + '</td>'
       + '<td><span class="badge">' + list.status + '</span></td>'
       + '<td>' + lines.length + '</td>'
       + '<td class="no-print">'
-      + '<button onclick="addSelectedRowsToPickingList(\'' + list.code + '\')">'
-      + 'Aggiungi flaggate</button>'
-      + '<button class="success" onclick="finishPicking(\'' + list.code + '\')">'
-      + 'Fine picking</button>'
-      + '</td></tr>';
+      + '<button onclick="addSelectedRowsToPickingList(\'' + list.code + '\')">Aggiungi flaggate</button>'
+      + '<button class="success" onclick="finishPicking(\'' + list.code + '\')">Fine picking</button>'
+      + '</td>'
+      + '</tr>';
   });
-  html += '</tbody></table>';
-  container.innerHTML = html;
-}
 
+  html += '</tbody></table>';
+
+  container.innerHTML = html;
+
+  // ✅ AGGIUNGI EVENTI CLICK (NO STRINGHE PERICOLOSE)
+  document.querySelectorAll('.picking-link').forEach(el => {
+    el.style.color = '#2563eb';
+    el.style.cursor = 'pointer';
+    el.style.textDecoration = 'underline';
+    el.style.fontWeight = 'bold';
+
+    el.onclick = () => {
+      const code = el.getAttribute('data-code');
+      openPickingDetail(code);
+    };
+  });
+}
 async function addSelectedRowsToPickingList(code) {
   const toAdd = appRequests.filter(r => r.selected && !r.pickingListCode);
   if (!toAdd.length) { alert('Flagga prima righe libere'); return; }
@@ -1956,98 +2603,248 @@ async function finishPicking(code) {
 }
 
 async function setPickingListStatusFromBarcode(newStatus) {
+
   const code = document.getElementById('pickingCodeInput')
                  .value.trim().replaceAll('*','');
-  if (!code) { alert('Inserisci il codice lista'); return; }
+
+  if (!code) {
+    alert('Inserisci il codice lista');
+    return;
+  }
+
   const list = appPickingLists.find(l => l.code === code);
-  if (!list) { alert('Lista non trovata'); return; }
+
+  if (!list) {
+    alert('Lista non trovata');
+    return;
+  }
+
   const n = nowParts();
-  const data = { status: newStatus };
+
+  const data = {
+    status: newStatus
+  };
+
+  // ✅ INIZIO STOCCAGGIO
   if (newStatus === 'Inizio stoccaggio') {
-    data.startStorageDate = n.date; data.startStorageTime = n.time;
+    data.startStorageDate = n.date;
+    data.startStorageTime = n.time;
     data.startStorageIso  = n.iso;
   }
+
+  // ✅ FINE STOCCAGGIO
   if (newStatus === 'Fine stoccaggio') {
-    data.endStorageDate = n.date; data.endStorageTime = n.time;
+    data.endStorageDate = n.date;
+    data.endStorageTime = n.time;
     data.endStorageIso  = n.iso;
   }
-  await fsUpdatePickingList(code, data);
-  alert('Stato lista ' + code + ' → ' + newStatus);
-}
 
+  // ✅ FINE PICKING (già esistente)
+  if (newStatus === 'Fine picking') {
+    data.endPickingDate = n.date;
+    data.endPickingTime = n.time;
+    data.endPickingIso  = n.iso;
+  }
+
+  await fsUpdatePickingList(code, data);
+
+  document.getElementById('pickingCodeInput').value = '';
+
+  alert('✅ Stato aggiornato: ' + code + ' → ' + newStatus);
+}
 // ============================================================
 // STORICO
 // ============================================================
 function renderHistoryTable() {
   const container = document.getElementById('historyPickingContainer');
   if (!container) return;
+
   if (!appHistory.length) {
-    container.innerHTML = '<p class="muted">Storico picking vuoto.</p>'; return;
+    container.innerHTML = '<p class="muted">Storico picking vuoto.</p>';
+    return;
   }
-  let html = '<table><thead><tr>'
-    + '<th>Codice</th><th>Descrizione</th><th>Qta</th><th>UM</th>'
-    + '<th>Value Stream</th><th>Linea</th><th>Ubicazione</th>'
-    + '<th>Priorità</th><th>Utente</th>'
-    + '<th>Lista picking</th><th>Data richiesta</th><th>Ora richiesta</th>'
-    + '<th>Fine picking</th></tr></thead><tbody>';
-  appHistory.forEach(r => {
+
+  // ✅ ORDINAMENTO
+  const sortedHistory = [...appHistory].sort((a, b) => {
+    const dateA = new Date((a.requestDate || '').split('/').reverse().join('-') + 'T' + (a.requestTime || '00:00:00'));
+    const dateB = new Date((b.requestDate || '').split('/').reverse().join('-') + 'T' + (b.requestTime || '00:00:00'));
+    return dateB - dateA;
+  });
+
+  // ✅ BASE DATI
+  let rows = [...sortedHistory];
+
+  // ✅ FILTRI EXCEL
+  const filters = columnFiltersHistory;
+
+
+Object.entries(filters).forEach(([col, selectedValues]) => {
+    if (!selectedValues || !selectedValues.length) return;
+
+    rows = rows.filter(r =>
+      selectedValues.includes(
+        normalizeFilterValue(String(r[col] || ''))
+      )
+    );
+  });
+
+  // ✅ HEADER
+  let html = '<table><thead><tr>' +
+    '<th>Codice' + renderExcelFilter('itemCode') + '</th>' +
+    '<th>Descrizione' + renderExcelFilter('description') + '</th>' +
+    '<th>Qta</th>' +
+    '<th>UM</th>' +
+    '<th>Value Stream' + renderExcelFilter('valueStream') + '</th>' +
+    '<th>Linea' + renderExcelFilter('line') + '</th>' +
+    '<th>Ubicazione' + renderExcelFilter('location') + '</th>' +
+    '<th>Priorità' + renderExcelFilter('priority') + '</th>' +
+    '<th>Utente' + renderExcelFilter('user') + '</th>' +
+    '<th>Lista picking' + renderExcelFilter('pickingListCode') + '</th>' +
+    '<th>Data richiesta' + renderExcelFilter('requestDate') + '</th>' +
+    '<th>Ora richiesta' + renderExcelFilter('requestTime') + '</th>' +
+    '<th>Inizio picking</th>' +
+    '<th>Fine picking</th>' +
+    '</tr></thead><tbody>';
+
+  // ✅ RIGHE
+  rows.forEach(r => {
     html += '<tr>'
-      + '<td>' + r.itemCode + '</td><td>' + r.description + '</td>'
-      + '<td>' + r.quantity + '</td><td>' + r.unit + '</td>'
-      + '<td>' + (r.valueStream||'') + '</td><td>' + (r.line||'') + '</td>'
-      + '<td>' + (r.location||'') + '</td>'
-      + '<td>' + priorityBadge(r.priority||'Normale') + '</td>'
-      + '<td>' + (r.user||'') + '</td>'
+      + '<td>' + r.itemCode + '</td>'
+      + '<td>' + r.description + '</td>'
+      + '<td>' + r.quantity + '</td>'
+      + '<td>' + r.unit + '</td>'
+      + '<td>' + (r.valueStream || '') + '</td>'
+      + '<td>' + (r.line || '') + '</td>'
+      + '<td>' + (r.location || '') + '</td>'
+      + '<td>' + priorityBadge(r.priority || 'Normale') + '</td>'
+      + '<td>' + (r.user || '') + '</td>'
       + '<td>' + r.pickingListCode + '</td>'
-      + '<td>' + r.requestDate + '</td><td>' + r.requestTime + '</td>'
-      + '<td>' + (r.endPickingDate||'') + ' ' + (r.endPickingTime||'') + '</td>'
+      + '<td>' + r.requestDate + '</td>'
+      + '<td>' + r.requestTime + '</td>'
+      + '<td>' + (r.inPickingDate || '') + ' ' + (r.inPickingTime || '') + '</td>'
+      + '<td>' + (r.endPickingDate || '') + ' ' + (r.endPickingTime || '') + '</td>'
       + '</tr>';
   });
+
   html += '</tbody></table>';
   container.innerHTML = html;
+}
+function openPickingDetail(code) {
+
+  showPanel('pickingDetailPanel');
+
+  document.getElementById('pickingDetailTitle').innerText =
+    'Dettaglio lista: ' + code;
+
+  const rows = appRequests.filter(r => r.pickingListCode === code);
+
+  if (!rows.length) {
+    document.getElementById('pickingDetailContainer').innerHTML =
+      '<p class="muted">Nessuna riga trovata</p>';
+    return;
+  }
+
+  let html = '<table><thead><tr>'
+    + '<th>Codice</th>'
+    + '<th>Descrizione</th>'
+    + '<th>Qta</th>'
+    + '<th>UM</th>'
+    + '<th>Value Stream</th>'
+    + '<th>Linea</th>'
+    + '<th>Ubicazione</th>'
+    + '<th>Priorità</th>'
+    + '<th>Utente</th>'
+    + '</tr></thead><tbody>';
+
+  rows.forEach(r => {
+    html += '<tr>'
+      + '<td><strong>' + r.itemCode + '</strong></td>'
+      + '<td>' + r.description + '</td>'
+      + '<td>' + r.quantity + '</td>'
+      + '<td>' + r.unit + '</td>'
+      + '<td>' + r.valueStream + '</td>'
+      + '<td>' + r.line + '</td>'
+      + '<td>' + (r.location || '') + '</td>'
+      + '<td>' + priorityBadge(r.priority || 'Normale') + '</td>'
+      + '<td>' + (r.user || '') + '</td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table>';
+
+  document.getElementById('pickingDetailContainer').innerHTML = html;
+}
+function backToPicking() {
+  showPanel('pickingPanel');
 }
 
 function renderProductionHistoryTable() {
   const container = document.getElementById('historyProductionContainer');
   if (!container) return;
+
   if (!appProductionHistory.length) {
-    container.innerHTML = '<p class="muted">Nessuna richiesta nello storico.</p>'; return;
+    container.innerHTML = '<p class="muted">Nessuna richiesta nello storico.</p>';
+    return;
   }
+
+  let rows = [...appProductionHistory];
+
+  // ✅ FILTRI
+  const filters = columnFiltersProductionHistory;
+
+
+  Object.entries(filters).forEach(([col, values]) => {
+    if (!values || values.length === 0) return;
+
+    rows = rows.filter(r =>
+      values.includes(normalizeFilterValue(String(r[col] || '')))
+    );
+  });
+
   let html = '<table><thead><tr>'
-    + '<th>Codice</th><th>Descrizione</th><th>Qta</th><th>UM</th>'
-    + '<th>Value Stream</th><th>Linea</th><th>Ubicazione</th>'
-    + '<th>Priorità</th><th>Utente</th>'
-    + '<th>Data draft</th><th>Ora draft</th>'
-    + '<th>Data invio</th><th>Ora invio</th>'
-    + '<th>Lista picking</th>'
+    + '<th>Codice' + renderExcelFilter('itemCode') + '</th>'
+    + '<th>Descrizione' + renderExcelFilter('description') + '</th>'
+    + '<th>Qta</th>'
+    + '<th>UM</th>'
+    + '<th>Value Stream' + renderExcelFilter('valueStream') + '</th>'
+    + '<th>Linea' + renderExcelFilter('line') + '</th>'
+    + '<th>Ubicazione' + renderExcelFilter('location') + '</th>'
+    + '<th>Priorità' + renderExcelFilter('priority') + '</th>'
+    + '<th>Utente' + renderExcelFilter('user') + '</th>'
+    + '<th>Data invio' + renderExcelFilter('requestDate') + '</th>'
+    + '<th>Ora invio' + renderExcelFilter('requestTime') + '</th>'
+    + '<th>Lista picking' + renderExcelFilter('pickingListCode') + '</th>'
     + '</tr></thead><tbody>';
-  appProductionHistory.forEach(r => {
+
+  rows.forEach(r => {
     html += '<tr>'
-      + '<td><strong>' + r.itemCode + '</strong></td>'
-      + '<td>' + escapeHtml(r.description||'') + '</td>'
-      + '<td>' + r.quantity + '</td><td>' + r.unit + '</td>'
-      + '<td>' + escapeHtml(r.valueStream||'') + '</td>'
-      + '<td>' + escapeHtml(r.line||'') + '</td>'
-      + '<td>' + escapeHtml(r.location||'') + '</td>'
-      + '<td>' + priorityBadge(r.priority||'Normale') + '</td>'
-      + '<td>' + escapeHtml(r.user||'') + '</td>'
-      + '<td>' + (r.insertDate||'') + '</td><td>' + (r.insertTime||'') + '</td>'
-      + '<td>' + (r.requestDate||'') + '</td><td>' + (r.requestTime||'') + '</td>'
-      + '<td>' + (r.pickingListCode||'—') + '</td>'
+      + '<td>' + r.itemCode + '</td>'
+      + '<td>' + r.description + '</td>'
+      + '<td>' + r.quantity + '</td>'
+      + '<td>' + r.unit + '</td>'
+      + '<td>' + r.valueStream + '</td>'
+      + '<td>' + r.line + '</td>'
+      + '<td>' + (r.location || '') + '</td>'
+      + '<td>' + priorityBadge(r.priority || 'Normale') + '</td>'
+      + '<td>' + (r.user || '') + '</td>'
+      + '<td>' + r.requestDate + '</td>'
+      + '<td>' + r.requestTime + '</td>'
+      + '<td>' + (r.pickingListCode || '—') + '</td>'
       + '</tr>';
   });
+
   html += '</tbody></table>';
+
   container.innerHTML = html;
 }
-
 function downloadHistoryExcel() {
-  downloadCsv('storico_picking.csv', appHistory);
+  downloadCsv('storico_picking_' + getFormattedDateTimeForFile() + '.csv', appHistory);
 }
 function downloadProductionHistoryExcel() {
   if (!appProductionHistory.length) {
     alert('Nessun dato nello storico produzione'); return;
   }
-  downloadCsv('storico_produzione.csv', appProductionHistory);
+  downloadCsv('storico_produzione_' + getFormattedDateTimeForFile() + '.csv', appProductionHistory);
 }
 function downloadRequestsExcel() {
   const rows = getVisibleRequests();
@@ -2057,7 +2854,7 @@ function downloadRequestsExcel() {
     return;
   }
 
-  downloadCsv('richieste_produzione_magazzino.csv', rows.map(r => ({
+ downloadCsv('richieste_produzione_magazzino_' + getFormattedDateTimeForFile() + '.csv', rows.map(r => ({
     'Codice articolo': r.itemCode || '',
     'Descrizione': r.description || '',
     'Quantità': r.quantity || '',
@@ -2203,37 +3000,34 @@ function renderAll() {
 // ============================================================
 // INIT - avvio app
 // ============================================================
+
+
 (async () => {
   try {
-    // ✅ NON bloccare avvio
     initAdminIfNeeded().catch(err => {
       console.warn("Init admin fallito:", err);
     });
 
-    // ✅ avvia listener Firestore
     startRealtimeListeners();
 
-    // ✅ 👇 QUI VA IL RIPRISTINO UTENTE
     setTimeout(() => {
       const savedUser = localStorage.getItem("currentUser");
 
       if (savedUser) {
         const user = JSON.parse(savedUser);
 
-        // ✅ usa i dati aggiornati da Firestore
         const updatedUser = appUsers.find(u => u.email === user.email);
 
         if (updatedUser) {
           setLoggedUser(updatedUser);
         }
       }
-    }, 1000); // piccolo ritardo per aspettare i listener
+    }, 1000);
 
   } catch (err) {
     console.error("Errore init:", err);
   }
 
-  // fallback UI
   setTimeout(() => {
     hideLoading();
   }, 3000);

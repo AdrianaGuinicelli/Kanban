@@ -666,172 +666,239 @@ function renderDashboard() {
 
   const now = new Date();
 
-  // ---------------------------------------------------
-  // UTILITY
-  // ---------------------------------------------------
-  const isWorkingDay = (d) => {
-    const day = d.getDay();
-    return day !== 0 && day !== 6; // no sabato/domenica
-  };
-
-  const parseDateTime = (dateStr, timeStr) => {
+  const parseDT = (dateStr, timeStr) => {
     if (!dateStr || !timeStr) return null;
-    const [d, m, y] = dateStr.split('/');
+    const [d,m,y] = dateStr.split('/');
     return new Date(`${y}-${m}-${d}T${timeStr}`);
   };
 
-  // ---------------------------------------------------
-  // FILTRA ULTIME 2 SETTIMANE (rolling lavorative)
-  // ---------------------------------------------------
+  // =============================
+  // DATI BASE
+  // =============================
   const last14Days = appHistory.filter(r => {
-    const dt = parseDateTime(r.requestDate, r.requestTime);
-    if (!dt) return false;
-
-    const diff = (now - dt) / (1000 * 60 * 60 * 24);
-    return diff <= 14 && isWorkingDay(dt);
+    const dt = parseDT(r.requestDate, r.requestTime);
+    return dt && ((now - dt)/(1000*60*60*24) <= 14);
   });
 
-  // ---------------------------------------------------
-  // TEMPO MEDIO PICKING
-  // ---------------------------------------------------
-  let totalTime = 0;
-  let countTime = 0;
-
-  last14Days.forEach(r => {
-
-    const start = parseDateTime(r.inPickingDate, r.inPickingTime);
-    const end   = parseDateTime(r.endPickingDate, r.endPickingTime);
-
-    if (start && end) {
-      totalTime += (end - start);
-      countTime++;
-    }
-
-  });
-
-  const avgPickingTimeMin = countTime
-    ? Math.round(totalTime / countTime / 60000)
-    : 0;
-
-  // ---------------------------------------------------
-  // RICHIESTE ULTIMI 21 GIORNI LAVORATIVI
-  // ---------------------------------------------------
   const last21 = appProductionHistory.filter(r => {
-    const dt = parseDateTime(r.requestDate, r.requestTime);
-    if (!dt) return false;
-
-    const diff = (now - dt) / (1000 * 60 * 60 * 24);
-    return diff <= 21 && isWorkingDay(dt);
+    const dt = parseDT(r.requestDate, r.requestTime);
+    return dt && ((now - dt)/(1000*60*60*24) <= 21);
   });
 
   const totalRequests21 = last21.length;
 
-  // ---------------------------------------------------
-  // ULTIMA SETTIMANA (lun-ven)
-  // ---------------------------------------------------
   const today = new Date();
-  const weekStart = new Date(today);
   const day = today.getDay();
-
   const diffToMonday = (day === 0 ? -6 : 1 - day);
+  const weekStart = new Date(today);
   weekStart.setDate(today.getDate() + diffToMonday);
 
   const lastWeekRequests = last21.filter(r => {
-    const dt = parseDateTime(r.requestDate, r.requestTime);
+    const dt = parseDT(r.requestDate, r.requestTime);
     return dt >= weekStart;
   });
 
   const totalRequestsWeek = lastWeekRequests.length;
 
-  // ---------------------------------------------------
-  // RICHIESTE PER TURNO
-  // ---------------------------------------------------
-  let turno1 = 0;
-  let turno2 = 0;
-
+  let turno1 = 0, turno2 = 0;
   lastWeekRequests.forEach(r => {
     const hour = Number(r.requestTime.split(':')[0]);
-
     if (hour >= 6 && hour <= 13) turno1++;
     if (hour >= 14 && hour <= 21) turno2++;
   });
 
-  // ---------------------------------------------------
-  // RIGHE MEDIE PER RICHIESTA
-  // ---------------------------------------------------
   const mapReq = {};
-
   last21.forEach(r => {
     if (!mapReq[r.id]) mapReq[r.id] = 0;
     mapReq[r.id]++;
   });
 
   const avgRows = Object.keys(mapReq).length
-    ? Math.round(
-        Object.values(mapReq).reduce((a,b) => a+b,0) /
-        Object.keys(mapReq).length
-      )
+    ? Math.round(Object.values(mapReq).reduce((a,b)=>a+b,0)/Object.keys(mapReq).length)
     : 0;
 
-  // ---------------------------------------------------
-  // % EVASIONE GIORNALIERA
-  // ---------------------------------------------------
-  const todayRequests = appProductionHistory.filter(r => {
+  // =============================
+  // KPI EVASIONE OGGI
+  // =============================
+  const isTodayShift = (dateStr, timeStr) => {
+    const dt = parseDT(dateStr,timeStr);
+    return dt && dt.toDateString() === now.toDateString() &&
+           dt.getHours() >= 6 && dt.getHours() <= 21;
+  };
 
-    const dt = parseDateTime(r.requestDate, r.requestTime);
-    if (!dt) return false;
+  const pickingCompleted = appPickingLists.filter(l =>
+    l.status === 'Fine picking' &&
+    isTodayShift(l.endPickingDate,l.endPickingTime)
+  ).length;
 
-    return dt.toDateString() === now.toDateString();
+  const pickingToday = appPickingLists.filter(l =>
+    (l.status === 'In picking' || l.status === 'Fine picking') &&
+    isTodayShift(l.createdDate,l.createdTime)
+  ).length;
+
+  const percPicking = pickingToday
+    ? Math.round(pickingCompleted/pickingToday*100)
+    : 0;
+
+  const rowsToday = appProductionHistory.filter(r =>
+    isTodayShift(r.requestDate,r.requestTime)
+  );
+
+  const rowsCompleted = appHistory.filter(r =>
+    r.status === 'Fine picking' &&
+    isTodayShift(r.endPickingDate,r.endPickingTime)
+  );
+
+  const percRows = rowsToday.length
+    ? Math.round(rowsCompleted.length/rowsToday.length*100)
+    : 0;
+
+  // =============================
+  // KPI TEMPI (ULTIME 2 SETTIMANE)
+  // =============================
+  let totalPick=0,countPick=0;
+  let totalLTP=0,countLTP=0;
+
+  last14Days.forEach(r=>{
+    const startPick = parseDT(r.inPickingDate,r.inPickingTime);
+    const endPick = parseDT(r.endPickingDate,r.endPickingTime);
+    const startReq = parseDT(r.requestDate,r.requestTime);
+
+    if(startPick && endPick){
+      totalPick += (endPick-startPick);
+      countPick++;
+    }
+
+    if(startReq && endPick){
+      totalLTP += (endPick-startReq);
+      countLTP++;
+    }
   });
 
-  const evase = todayRequests.filter(r => r.pickingListCode).length;
+  const avgPickingTime = countPick ? Math.round(totalPick/countPick/60000) : 0;
+  const avgLeadTimePicking = countLTP ? Math.round(totalLTP/countLTP/60000) : 0;
 
-  const percEvasione = todayRequests.length
-    ? Math.round((evase / todayRequests.length) * 100)
-    : 0;
+  let totalStock=0,countStock=0;
+  let totalLTStock=0,countLTStock=0;
+const last14DaysLists = appPickingLists.filter(l => {
+  const dt = parseDT(l.endStorageDate, l.endStorageTime);
+  return dt && ((now - dt)/(1000*60*60*24) <= 14);
+});
+  last14DaysLists.forEach(l=>{
+    const startStock = parseDT(l.startStorageDate,l.startStorageTime);
+    const endStock = parseDT(l.endStorageDate,l.endStorageTime);
+    const endPick = parseDT(l.endPickingDate,l.endPickingTime);
 
-  // ---------------------------------------------------
+    if(startStock && endStock){
+      totalStock += (endStock-startStock);
+      countStock++;
+    }
+
+    if(endPick && endStock){
+      totalLTStock += (endStock-endPick);
+      countLTStock++;
+    }
+  });
+
+  const avgStorageTime = countStock ? Math.round(totalStock/countStock/60000) : 0;
+  const avgLeadTimeStorage = countLTStock ? Math.round(totalLTStock/countLTStock/60000) : 0;
+
+  // =============================
   // RENDER
-  // ---------------------------------------------------
+  // =============================
   document.getElementById('dashboardContainer').innerHTML = `
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
-
-    <div class="card" style="background:#003A8F;color:white;">
-      <h3>⏱ Tempo medio picking</h3>
-      <h1>${avgPickingTimeMin} min</h1>
-      <p>ultime 2 settimane</p>
+  <!-- ✅ RIGA 1 -->
+  <div class="card" style="background:#16a34a;color:white;display:flex;gap:40px;padding:20px;width:fit-content;">
+    
+    <div style="text-align:center;">
+      <div style="font-size:22px;">✅</div>
+      <h3>Evasione liste</h3>
+      <h1>${percPicking}%</h1>
+      <p>${pickingCompleted}/${pickingToday} liste (oggi)</p>
     </div>
 
+    <div style="width:2px;background:white;"></div>
+
+    <div style="text-align:center;">
+      <div style="font-size:22px;">📦</div>
+      <h3>Evasione righe</h3>
+      <h1>${percRows}%</h1>
+      <p>${rowsCompleted.length}/${rowsToday.length} righe (oggi)</p>
+    </div>
+
+  </div>
+
+  <!-- ✅ RIGA 2 -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:20px;">
+
     <div class="card">
-      <h3>📦 Richieste (21 gg)</h3>
+      <h3>📦 Richieste</h3>
       <h1>${totalRequests21}</h1>
+      <p>ultimi 21 giorni</p>
     </div>
 
     <div class="card">
-      <h3>📊 Ultima settimana</h3>
+      <h3>📊 Settimana</h3>
       <h1>${totalRequestsWeek}</h1>
+      <p>lun–oggi</p>
     </div>
 
-    <div class="card">
-      <h3>👥 Turni</h3>
-      <p>1°turno: <b>${turno1}</b></p>
-      <p>2°turno: <b>${turno2}</b></p>
-    </div>
+<div class="card">
+  <h3>👥 Turni</h3>
+
+  <p style="margin:8px 0 4px 0;">
+    1° turno: <b>${turno1}</b>
+  </p>
+
+  <p style="margin:0;">
+    2° turno: <b>${turno2}</b>
+  </p>
+
+  <p style="margin-top:8px;font-size:12px;color:#6b7280;">
+    distribuzione richieste (settimana corrente)
+  </p>
+</div>
 
     <div class="card">
-      <h3>📋 Righe per richiesta</h3>
+      <h3>📋 Righe/richiesta</h3>
       <h1>${avgRows}</h1>
+      <p>ultimi 21 giorni</p>
     </div>
 
-    <div class="card" style="background:#16a34a;color:white;">
-      <h3>✅ Evasione oggi</h3>
-      <h1>${percEvasione}%</h1>
+  </div>
+
+  <!-- ✅ RIGA 3 -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:20px;">
+
+    <div class="card">
+      <h3>⏱ Tempo picking</h3>
+      <h1>${avgPickingTime} min</h1>
+      <p>media ultimi 14 giorni</p>
+    </div>
+
+    <div class="card" style="background:#7c3aed;color:white;">
+      <h3>⏳ Lead time picking</h3>
+      <h1>${avgLeadTimePicking} min</h1>
+      <p>media ultimi 14 giorni</p>
+    </div>
+
+    <div class="card">
+      <h3>🏗 Tempo stoccaggio</h3>
+      <h1>${avgStorageTime} min</h1>
+      <p>media ultimi 14 giorni</p>
+    </div>
+
+    <div class="card">
+      <h3>🚚 Lead time stoccaggio</h3>
+      <h1>${avgLeadTimeStorage} min</h1>
+      <p>media ultimi 14 giorni</p>
     </div>
 
   </div>
   `;
 }
+
 // ============================================================
 // AUDIO
 // ============================================================
@@ -2816,9 +2883,10 @@ if (currentUser?.role === 'admin') {
 } else {
 
   // ✅ produzione + magazzino → solo attive
-  rows = appPickingLists.filter(r =>
-    r.status !== 'Fine picking'
-  );
+rows = appPickingLists.filter(r =>
+  r.status !== 'Fine picking' &&
+  r.status !== 'Fine stoccaggio'
+);
 }
 
 
@@ -2959,11 +3027,41 @@ async function setPickingListStatusFromBarcode(newStatus) {
   }
 
   // ✅ FINE STOCCAGGIO
-  if (newStatus === 'Fine stoccaggio') {
-    data.endStorageDate = n.date;
-    data.endStorageTime = n.time;
-    data.endStorageIso  = n.iso;
-  }
+if (newStatus === 'Fine stoccaggio') {
+
+  data.endStorageDate = n.date;
+  data.endStorageTime = n.time;
+  data.endStorageIso  = n.iso;
+
+  // ✅ 1. prendo tutte le righe della lista
+  const rows = appRequests.filter(r => r.pickingListCode === code);
+
+  // ✅ 2. preparo batch
+  const batch = db.batch();
+
+  // ✅ 3. aggiorno ogni riga nello storico
+  rows.forEach(r => {
+
+    const histItem = {
+      ...r,
+      status: 'Fine stoccaggio',
+      endStorageDate: n.date,
+      endStorageTime: n.time,
+      endStorageIso: n.iso
+    };
+
+    batch.set(db.collection('history').doc(r.id), histItem);
+
+    // ✅ cancella dalla tabella attiva
+    batch.delete(db.collection('requests').doc(r.firestoreId));
+  });
+
+  // ✅ 4. elimina la lista picking attiva
+  batch.delete(db.collection('pickingLists').doc(code));
+
+  // ✅ 5. ESEGUI
+  await batch.commit();
+}
 
   // ✅ FINE PICKING (già esistente)
   if (newStatus === 'Fine picking') {

@@ -2916,7 +2916,14 @@ rows = appPickingLists.filter(r =>
     + '</tr></thead><tbody>';
 
   rows.forEach(list => {
-    const lines = appRequests.filter(r => r.pickingListCode === list.code);
+    let lines;
+
+if (list.status === 'In picking') {
+  lines = appRequests.filter(r => r.pickingListCode === list.code);
+} else {
+  // ✅ per liste già chiuse / in stoccaggio usa storico
+  lines = appHistory.filter(r => r.pickingListCode === list.code);
+}
 
     html += '<tr>'
       + '<td>'

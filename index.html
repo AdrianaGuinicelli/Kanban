@@ -1551,9 +1551,12 @@ function toggleAddItemForm() {
 }
 
 async function addItemManually() {
+
   if (!currentUser || currentUser.role !== 'admin') {
-    alert('Solo admin può modificare l\'anagrafica'); return;
+    alert('Solo admin può modificare l\'anagrafica');
+    return;
   }
+
   const code        = document.getElementById('newItemCode').value.trim().toUpperCase();
   const description = document.getElementById('newItemDescription').value.trim();
   const unit        = document.getElementById('newItemUnit').value.trim();
@@ -1561,24 +1564,102 @@ async function addItemManually() {
   const valueStream = document.getElementById('newItemVS').value.trim();
   const line        = document.getElementById('newItemLine').value.trim();
   const location    = document.getElementById('newItemLocation').value.trim();
+
   if (!code || !description || !unit || !valueStream || !line) {
-    alert('Compila tutti i campi obbligatori (*)'); return;
+    alert('Compila tutti i campi obbligatori (*)');
+    return;
   }
+
   if (!qty || qty <= 0) {
-    alert('La quantità default deve essere maggiore di zero'); return;
+    alert('La quantità default deve essere maggiore di zero');
+    return;
   }
-  if (itemMaster[code]) {
-    const ok = confirm('Il codice ' + code + ' esiste già.\nVuoi sovrascrivere?');
-    if (!ok) return;
-  }
+
   const now = new Date().toLocaleString('it-IT');
-  await fsSetItemMaster(code, {
-    description, unit, defaultQty: qty, valueStream, line, location,
-    uploadDate: itemMaster[code] ? (itemMaster[code].uploadDate || now) : now
+
+  const newItem = {
+    description,
+    unit,
+    defaultQty: qty,
+    valueStream,
+    line,
+    location,
+    uploadDate: now
+  };
+
+  // 🔍 CODICE NON ESISTE → crea nuova entry
+  if (!itemMaster[code]) {
+
+    await db.collection('itemMaster').doc(code).set({
+      variants: [newItem]
+    });
+
+    alert('✅ Nuovo codice creato');
+    toggleAddItemForm();
+    return;
+  }
+
+  const variants = itemMaster[code];
+
+  // 🔍 CERCA VARIANTE IDENTICA (VS + LINE + UM)
+  const existing = variants.find(v =>
+    v.valueStream === valueStream &&
+    v.line === line &&
+    v.unit === unit
+  );
+
+  // ✅ CASO 1: IDENTICO → overwrite
+  if (existing) {
+
+    const ok = confirm(
+      '⚠️ Questa combinazione esiste già.\n\n' +
+      'Codice: ' + code + '\n' +
+      'Value Stream: ' + valueStream + '\n' +
+      'Linea: ' + line + '\n' +
+      'UM: ' + unit + '\n\n' +
+      'Vuoi sovrascrivere i dati?'
+    );
+
+    if (!ok) return;
+
+    Object.assign(existing, newItem);
+
+  }
+
+  // 🔄 CASO 2: CODICE ESISTE ma VARIANTE DIVERSA
+  else {
+
+    const diffList = variants.map(v =>
+      '• VS:' + v.valueStream +
+      ' | Linea:' + v.line +
+      ' | UM:' + v.unit
+    ).join('\n');
+
+    const ok = confirm(
+      '⚠️ Il codice esiste già con altre varianti:\n\n' +
+      diffList +
+      '\n\n👉 Stai inserendo:\n' +
+      'VS:' + valueStream +
+      ' | Linea:' + line +
+      ' | UM:' + unit +
+      '\n\nVuoi aggiungere una nuova variante?'
+    );
+
+    if (!ok) return;
+
+    variants.push(newItem);
+  }
+
+  // 💾 SALVA TUTTE LE VARIANTI
+  await db.collection('itemMaster').doc(code).set({
+    variants: variants
   });
-  alert('✅ Articolo ' + code + ' aggiunto!');
+
+  alert('✅ Anagrafica aggiornata');
+
   toggleAddItemForm();
 }
+
 
 function renderItemMasterTable() {
 

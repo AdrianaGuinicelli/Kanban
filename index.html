@@ -207,6 +207,7 @@ nav button.active {
     <button onclick="showPanel('warehousePanel')">Tabella richieste</button>
     <button onclick="showPanel('pickingPanel')">Liste picking</button>
     <button onclick="showPanel('historyPanel')">Storico</button>
+<button onclick="showPanel('dashboardPanel')">📊 Dashboard</button>
 <div style="position:relative;">
   
   <button onclick="toggleAnagraficaMenu()" id="anagraficaBtn">
@@ -336,27 +337,30 @@ nav button.active {
 <section id="pickingPanel" class="card hidden">
   <h2>Liste di picking generate</h2>
 
-  <div class="toolbar no-print">
-<input id="pickingCodeInput" placeholder="Spara codice lista picking" />
 
-<!-- 🟠 NUOVO: Fine Picking (warning) -->
-<button class="warning"
-  onclick="setPickingListStatusFromBarcode('Fine picking')">
-  ⛔ Fine picking
-</button>
+<!-- ✅ SOLO magazzino + admin -->
+<div class="toolbar no-print">
 
-<!-- 🔵 Inizio -->
-<button onclick="setPickingListStatusFromBarcode('Inizio stoccaggio')">
-  🚚 Inizio stoccaggio
-</button>
+  <input id="pickingCodeInput" placeholder="Spara codice lista picking" />
 
-<!-- 🟢 Fine Stoccaggio (success) -->
-<button class="success"
-  onclick="setPickingListStatusFromBarcode('Fine stoccaggio')">
-  ✅ Fine stoccaggio
-</button>
+  <button class="warning"
+    onclick="setPickingListStatusFromBarcode('Fine picking')">
+    ⛔ Fine picking
+  </button>
 
-  </div>
+  <button id="btnStartStorage"
+    onclick="setPickingListStatusFromBarcode('Inizio stoccaggio')">
+    🚚 Inizio stoccaggio
+  </button>
+
+  <button id="btnEndStorage" class="success"
+    onclick="setPickingListStatusFromBarcode('Fine stoccaggio')">
+    ✅ Fine stoccaggio
+  </button>
+
+</div>
+
+
 
   <div id="pickingTableContainer"></div>
 </section>
@@ -418,6 +422,13 @@ nav button.active {
     <div id="usersTableContainer"></div>
   </section>
 
+<section id="dashboardPanel" class="card hidden">
+
+  <h2>📊 Dashboard Operativa</h2>
+
+  <div id="dashboardContainer"></div>
+
+</section>
 <section id="profilePanel" class="card hidden">
   <h2>Profilo utente</h2>
 
@@ -651,6 +662,176 @@ function hideLoading() {
   document.getElementById('loadingOverlay').style.display = 'none';
 }
 
+function renderDashboard() {
+
+  const now = new Date();
+
+  // ---------------------------------------------------
+  // UTILITY
+  // ---------------------------------------------------
+  const isWorkingDay = (d) => {
+    const day = d.getDay();
+    return day !== 0 && day !== 6; // no sabato/domenica
+  };
+
+  const parseDateTime = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    const [d, m, y] = dateStr.split('/');
+    return new Date(`${y}-${m}-${d}T${timeStr}`);
+  };
+
+  // ---------------------------------------------------
+  // FILTRA ULTIME 2 SETTIMANE (rolling lavorative)
+  // ---------------------------------------------------
+  const last14Days = appHistory.filter(r => {
+    const dt = parseDateTime(r.requestDate, r.requestTime);
+    if (!dt) return false;
+
+    const diff = (now - dt) / (1000 * 60 * 60 * 24);
+    return diff <= 14 && isWorkingDay(dt);
+  });
+
+  // ---------------------------------------------------
+  // TEMPO MEDIO PICKING
+  // ---------------------------------------------------
+  let totalTime = 0;
+  let countTime = 0;
+
+  last14Days.forEach(r => {
+
+    const start = parseDateTime(r.inPickingDate, r.inPickingTime);
+    const end   = parseDateTime(r.endPickingDate, r.endPickingTime);
+
+    if (start && end) {
+      totalTime += (end - start);
+      countTime++;
+    }
+
+  });
+
+  const avgPickingTimeMin = countTime
+    ? Math.round(totalTime / countTime / 60000)
+    : 0;
+
+  // ---------------------------------------------------
+  // RICHIESTE ULTIMI 21 GIORNI LAVORATIVI
+  // ---------------------------------------------------
+  const last21 = appProductionHistory.filter(r => {
+    const dt = parseDateTime(r.requestDate, r.requestTime);
+    if (!dt) return false;
+
+    const diff = (now - dt) / (1000 * 60 * 60 * 24);
+    return diff <= 21 && isWorkingDay(dt);
+  });
+
+  const totalRequests21 = last21.length;
+
+  // ---------------------------------------------------
+  // ULTIMA SETTIMANA (lun-ven)
+  // ---------------------------------------------------
+  const today = new Date();
+  const weekStart = new Date(today);
+  const day = today.getDay();
+
+  const diffToMonday = (day === 0 ? -6 : 1 - day);
+  weekStart.setDate(today.getDate() + diffToMonday);
+
+  const lastWeekRequests = last21.filter(r => {
+    const dt = parseDateTime(r.requestDate, r.requestTime);
+    return dt >= weekStart;
+  });
+
+  const totalRequestsWeek = lastWeekRequests.length;
+
+  // ---------------------------------------------------
+  // RICHIESTE PER TURNO
+  // ---------------------------------------------------
+  let turno1 = 0;
+  let turno2 = 0;
+
+  lastWeekRequests.forEach(r => {
+    const hour = Number(r.requestTime.split(':')[0]);
+
+    if (hour >= 6 && hour <= 13) turno1++;
+    if (hour >= 14 && hour <= 21) turno2++;
+  });
+
+  // ---------------------------------------------------
+  // RIGHE MEDIE PER RICHIESTA
+  // ---------------------------------------------------
+  const mapReq = {};
+
+  last21.forEach(r => {
+    if (!mapReq[r.id]) mapReq[r.id] = 0;
+    mapReq[r.id]++;
+  });
+
+  const avgRows = Object.keys(mapReq).length
+    ? Math.round(
+        Object.values(mapReq).reduce((a,b) => a+b,0) /
+        Object.keys(mapReq).length
+      )
+    : 0;
+
+  // ---------------------------------------------------
+  // % EVASIONE GIORNALIERA
+  // ---------------------------------------------------
+  const todayRequests = appProductionHistory.filter(r => {
+
+    const dt = parseDateTime(r.requestDate, r.requestTime);
+    if (!dt) return false;
+
+    return dt.toDateString() === now.toDateString();
+  });
+
+  const evase = todayRequests.filter(r => r.pickingListCode).length;
+
+  const percEvasione = todayRequests.length
+    ? Math.round((evase / todayRequests.length) * 100)
+    : 0;
+
+  // ---------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------
+  document.getElementById('dashboardContainer').innerHTML = `
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+
+    <div class="card" style="background:#003A8F;color:white;">
+      <h3>⏱ Tempo medio picking</h3>
+      <h1>${avgPickingTimeMin} min</h1>
+      <p>ultime 2 settimane</p>
+    </div>
+
+    <div class="card">
+      <h3>📦 Richieste (21 gg)</h3>
+      <h1>${totalRequests21}</h1>
+    </div>
+
+    <div class="card">
+      <h3>📊 Ultima settimana</h3>
+      <h1>${totalRequestsWeek}</h1>
+    </div>
+
+    <div class="card">
+      <h3>👥 Turni</h3>
+      <p>1°turno: <b>${turno1}</b></p>
+      <p>2°turno: <b>${turno2}</b></p>
+    </div>
+
+    <div class="card">
+      <h3>📋 Righe per richiesta</h3>
+      <h1>${avgRows}</h1>
+    </div>
+
+    <div class="card" style="background:#16a34a;color:white;">
+      <h3>✅ Evasione oggi</h3>
+      <h1>${percEvasione}%</h1>
+    </div>
+
+  </div>
+  `;
+}
 // ============================================================
 // AUDIO
 // ============================================================
@@ -961,29 +1142,46 @@ async function saveProfile() {
 }
 
 function applyRoleVisibility() {
-  const buttons    = document.querySelectorAll('#mainNav button');
-  const uploadBtn  = document.getElementById('uploadBtn');
-  const missingBtn = document.getElementById('missingCodesBtn');
+
+  const buttons = document.querySelectorAll('#mainNav button');
+  const anagraficaBtn = document.getElementById('anagraficaBtn');
+
+  // reset
   buttons.forEach(b => b.classList.remove('hidden'));
-  if (currentUser.role === 'produzione') {
-    [1,2,3,4].forEach(i => buttons[i].classList.add('hidden'));
-    if (uploadBtn)  uploadBtn.classList.add('hidden');
-    if (missingBtn) missingBtn.classList.add('hidden');
+
+  // 👷 PRODUZIONE
+if (currentUser.role === 'produzione') {
+
+  buttons[1].classList.add('hidden'); // warehouse
+  buttons[3].classList.add('hidden'); // 🔥 storico
+  buttons[4].classList.add('hidden'); // dashboard
+
+    if (anagraficaBtn) anagraficaBtn.classList.add('hidden');
+
     showPanel('productionPanel');
   }
-  if (currentUser.role === 'magazzino') {
-    [0,3,4].forEach(i => buttons[i].classList.add('hidden'));
-    if (uploadBtn)  uploadBtn.classList.add('hidden');
-    if (missingBtn) missingBtn.classList.add('hidden');
+
+  // 📦 MAGAZZINO
+if (currentUser.role === 'magazzino') {
+
+  buttons[0].classList.add('hidden'); // produzione
+  buttons[3].classList.add('hidden'); // 🔥 storico
+  buttons[4].classList.add('hidden'); // dashboard
+
+    if (anagraficaBtn) anagraficaBtn.classList.add('hidden');
+
     showPanel('warehousePanel');
   }
+
+  // 🧠 ADMIN
   if (currentUser.role === 'admin') {
-    if (uploadBtn)  uploadBtn.classList.remove('hidden');
-    if (missingBtn) missingBtn.classList.remove('hidden');
-    updateMissingCodesBtnColor();
+
+    if (anagraficaBtn) anagraficaBtn.classList.remove('hidden');
+
     showPanel('productionPanel');
   }
 }
+
 
 // ============================================================
 // COLORE PULSANTE CODICI MANCANTI
@@ -1003,19 +1201,25 @@ function updateMissingCodesBtnColor() {
 // ============================================================
 function showPanel(panelId) {
 
-  // ✅ nascondi TUTTI i pannelli
+  // ✅ 1. nascondi tutti i pannelli
   document.querySelectorAll(
     'main > section, #uploadPanel, #missingCodesPanel'
   ).forEach(el => el.classList.add('hidden'));
 
-  // ✅ mostra SOLO quello richiesto
+  // ✅ 2. mostra quello selezionato
   document.getElementById(panelId).classList.remove('hidden');
 
-  // ✅ evidenzia bottone attivo
+  // ✅ ✅ ✅ QUI VA
+  if (panelId === 'pickingPanel') {
+    applyPickingToolbarVisibility();
+  }
+
+  // ✅ 3. evidenzia il bottone attivo
   document.querySelectorAll('#mainNav button').forEach(btn => {
     btn.classList.remove('active');
   });
 
+  // ✅ QUESTO RESTA DOPO
   const map = {
     productionPanel: document.querySelector('[onclick="showPanel(\'productionPanel\')"]'),
     warehousePanel: document.querySelector('[onclick="showPanel(\'warehousePanel\')"]'),
@@ -1025,6 +1229,10 @@ function showPanel(panelId) {
 
   if (map[panelId]) {
     map[panelId].classList.add('active');
+  }
+
+  if (panelId === 'dashboardPanel') {
+    renderDashboard();
   }
 
   renderAll();
@@ -1040,16 +1248,9 @@ function toggleAnagraficaMenu() {
 
   menu.style.display = isOpen ? 'none' : 'block';
 }
-document.addEventListener('click', function(event) {
-  const menu = document.getElementById('anagraficaMenu');
-  const btn = document.getElementById('anagraficaBtn');
 
-  if (!menu || !btn) return;
 
-  if (!menu.contains(event.target) && !btn.contains(event.target)) {
-    menu.style.display = 'none';
-  }
-});
+
 function toggleUploadPanel() {
   const upload  = document.getElementById('uploadPanel');
   const missing = document.getElementById('missingCodesPanel');
@@ -1101,7 +1302,32 @@ function toggleMissingCodesPanel() {
   missing.classList.remove('hidden');
   renderMissingCodesTable();
 }
+function applyPickingToolbarVisibility() {
 
+  const role = currentUser?.role;
+
+  const btnFinePicking = document.querySelector('[onclick*="Fine picking"]');
+  const btnStart = document.getElementById('btnStartStorage');
+  const btnEnd = document.getElementById('btnEndStorage');
+
+  // reset
+  if (btnFinePicking) btnFinePicking.style.display = 'inline-block';
+  if (btnStart) btnStart.style.display = 'inline-block';
+  if (btnEnd) btnEnd.style.display = 'inline-block';
+
+  // 👷 PRODUZIONE
+  if (role === 'produzione') {
+    if (btnFinePicking) btnFinePicking.style.display = 'none';
+  }
+
+  // 📦 MAGAZZINO
+  if (role === 'magazzino') {
+    if (btnStart) btnStart.style.display = 'none';
+    if (btnEnd) btnEnd.style.display = 'none';
+  }
+
+  // ADMIN → tutto visibile
+}
 // ============================================================
 // STORICO TAB
 // ============================================================
@@ -1851,7 +2077,9 @@ function renderDraftRows() {
     + '<th>UM</th><th>Value Stream</th><th>Linea</th>'
     + '<th>Ubicazione <span style="font-weight:normal;font-size:11px;color:#6b7280;">(clicca)</span></th>'
     + '<th>Priorità <span style="font-weight:normal;font-size:11px;color:#6b7280;">(clicca)</span></th>'
-    + '<th class="no-print">Azioni</th>'
+  + (currentUser?.role !== 'produzione'
+   ? '<th class="no-print">Azioni</th>'
+   : '')
     + '</tr></thead><tbody>';
 
   draftRows.forEach(r => {
@@ -2497,9 +2725,21 @@ function renderPickingTable() {
     return;
   }
 
-let rows = appPickingLists.filter(r =>
-  r.status !== 'Fine picking'
-);
+let rows;
+
+if (currentUser?.role === 'admin') {
+
+  // ✅ admin vede tutto
+  rows = appPickingLists;
+
+} else {
+
+  // ✅ produzione + magazzino → solo attive
+  rows = appPickingLists.filter(r =>
+    r.status !== 'Fine picking'
+  );
+}
+
 
   const filters = columnFiltersPicking;
 
@@ -2521,7 +2761,9 @@ let rows = appPickingLists.filter(r =>
     + '<th>Ora creazione ' + renderExcelFilter('createdTime') + '</th>'
     + '<th>Stato ' + renderExcelFilter('status') + '</th>'
     + '<th>Righe</th>'
-    + '<th class="no-print">Azioni</th>'
+    + (currentUser?.role !== 'produzione'
+   ? '<th class="no-print">Azioni</th>'
+   : '')
     + '</tr></thead><tbody>';
 
   rows.forEach(list => {
@@ -2538,9 +2780,12 @@ let rows = appPickingLists.filter(r =>
       + '<td>' + list.createdTime + '</td>'
       + '<td><span class="badge">' + list.status + '</span></td>'
       + '<td>' + lines.length + '</td>'
-      + '<td class="no-print">'
-      + '<button onclick="addSelectedRowsToPickingList(\'' + list.code + '\')">Aggiungi flaggate</button>'
-      + '<button class="success" onclick="finishPicking(\'' + list.code + '\')">Fine picking</button>'
++ (currentUser?.role !== 'produzione'
+   ? '<td class="no-print">'
+     + '<button onclick="addSelectedRowsToPickingList(\'' + list.code + '\')">Aggiungi flaggate</button>'
+     + '<button class="success" onclick="finishPicking(\'' + list.code + '\')">Fine picking</button>'
+     + '</td>'
+   : '')
       + '</td>'
       + '</tr>';
   });
@@ -2773,6 +3018,7 @@ function openPickingDetail(code) {
   html += '</tbody></table>';
 
   document.getElementById('pickingDetailContainer').innerHTML = html;
+
 }
 function backToPicking() {
   showPanel('pickingPanel');
